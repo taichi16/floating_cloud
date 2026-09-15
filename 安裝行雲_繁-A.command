@@ -14,6 +14,10 @@ echo "         行雲_繁-A - 自動安裝程式         "
 echo "=========================================="
 echo
 
+# 0. 先關閉系統設定，避免 Apple SwiftUI 快取衝突
+killall "System Settings" >/dev/null 2>&1 || true
+killall "KeyboardSettings" >/dev/null 2>&1 || true
+
 # 1. 檢查並定位安裝來源
 SOURCE_APP=""
 if [[ -d "$LOCAL_APP" ]]; then
@@ -67,7 +71,7 @@ killall TextInputMenuAgent >/dev/null 2>&1 || true
 killall TextInputSwitcher >/dev/null 2>&1 || true
 killall cfprefsd >/dev/null 2>&1 || true
 
-# 5. 啟用並選取輸入法
+# 5. 啟用並選取輸入法 (包含自動句柄去重與單一守護)
 echo "✨ 正在啟用 行雲_繁-A..."
 if [[ -x "$INSTALL_DIR/Contents/MacOS/UnifyIME" ]]; then
     "$INSTALL_DIR/Contents/MacOS/UnifyIME" install || true

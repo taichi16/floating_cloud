@@ -1,4 +1,5 @@
 import Foundation
+import Carbon
 
 private func declaredInputModeIDs(in bundle: Bundle) -> [String] {
     guard let component = bundle.object(forInfoDictionaryKey: "ComponentInputModeDict") as? [String: Any],
@@ -10,87 +11,140 @@ private func declaredInputModeIDs(in bundle: Bundle) -> [String] {
 
 func installInputMethod() -> Int32 {
     guard let bundleID = Bundle.main.bundleIdentifier else {
-        NSLog("Missing bundle identifier.")
+        NSLog("%@", "Missing bundle identifier.")
         return 1
     }
     let bundleURL = Bundle.main.bundleURL
     let modeIDs = declaredInputModeIDs(in: Bundle.main)
     guard let primaryModeID = modeIDs.first else {
-        NSLog("No input mode declared in %@.", bundleURL.path)
+        NSLog("%@", "No input mode declared in \(bundleURL.path).")
         return 1
     }
 
-    let alreadyRegistered = (InputSourceHelper.inputSource(for: bundleID) != nil) || (InputSourceHelper.inputMode(for: primaryModeID) != nil)
-    if !alreadyRegistered {
-        NSLog("Registering input source %@ at %@", bundleID, bundleURL.absoluteString)
+    // 1. 取得現有所有 TIS 來源，避免重複註冊，並停用重複的多餘 handle
+    guard let sourceList = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource] else {
+        NSLog("%@", "Cannot retrieve TIS input source list.")
+        return 1
+    }
+
+    var matchingParents: [TISInputSource] = []
+    var matchingModes: [String: [TISInputSource]] = [:]
+
+    for src in sourceList {
+        let bundlePtr = TISGetInputSourceProperty(src, kTISPropertyBundleID)
+        let bID = bundlePtr != nil ? Unmanaged<CFString>.fromOpaque(bundlePtr!).takeUnretainedValue() as String : ""
+        guard bID == bundleID else { continue }
+
+        let typePtr = TISGetInputSourceProperty(src, kTISPropertyInputSourceType)
+        let type = typePtr != nil ? Unmanaged<CFString>.fromOpaque(typePtr!).takeUnretainedValue() as String : ""
+
+        if type == (kTISTypeKeyboardInputMode as String) {
+            let idPtr = TISGetInputSourceProperty(src, kTISPropertyInputSourceID)
+            let mID = idPtr != nil ? Unmanaged<CFString>.fromOpaque(idPtr!).takeUnretainedValue() as String : ""
+            matchingModes[mID, default: []].append(src)
+        } else {
+            matchingParents.append(src)
+        }
+    }
+
+    let isRegistered = !matchingParents.isEmpty || !matchingModes.isEmpty
+    if !isRegistered {
+        NSLog("%@", "Registering input source \(bundleID) at \(bundleURL.absoluteString)")
         guard InputSourceHelper.registerInputSource(at: bundleURL) else {
-            NSLog("Cannot register input source %@.", bundleID)
+            NSLog("%@", "Cannot register input source \(bundleID).")
             return 1
         }
     } else {
-        NSLog("Input source %@ already registered in TIS, skipping duplicate registration.", bundleID)
+        NSLog("%@", "Input source \(bundleID) already registered in TIS, skipping duplicate registration.")
     }
 
-    // macOS 對輸入法採用「父輸入來源 + 子輸入模式」兩層狀態。
-    // 只啟用子模式有時會讓 TISSelectInputSource 回報成功，但父項仍不會出現在
-    // 輸入來源選單，結果是使用者看似切換、實際按鍵仍交給上一個輸入法。
-    guard let parent = InputSourceHelper.inputSource(for: bundleID) else {
-        NSLog("Cannot find parent input source %@ after registration.", bundleID)
-        return 1
-    }
-    NSLog("Enabling parent input source %@.", bundleID)
-    guard InputSourceHelper.enable(inputSource: parent),
-          InputSourceHelper.waitUntilInputSourceEnabled(bundleID) else {
-        NSLog("Input source %@ still not enabled.", bundleID)
-        return 2
+    // 2. 對於 Parent：若有多個，停用舊的，只保留最新 1 個
+    let parentSource: TISInputSource?
+    if let lastParent = matchingParents.last {
+        parentSource = lastParent
+        for redundant in matchingParents.dropLast() {
+            NSLog("%@", "Disabling redundant parent source...")
+            TISDisableInputSource(redundant)
+        }
+    } else {
+        parentSource = InputSourceHelper.inputSource(for: bundleID)
     }
 
+    if let parent = parentSource {
+        NSLog("%@", "Enabling parent input source \(bundleID).")
+        _ = InputSourceHelper.enable(inputSource: parent)
+    }
+
+    // 3. 對於每個 Input Mode：若有多個，停用舊的，只保留最新 1 個
+    var primaryModeSource: TISInputSource?
     for modeID in modeIDs {
-        guard let source = InputSourceHelper.inputMode(for: modeID) else {
-            NSLog("Cannot find input mode %@ after registration.", modeID)
-            return 1
+        let modes = matchingModes[modeID] ?? []
+        let modeSource: TISInputSource?
+        if let lastMode = modes.last {
+            modeSource = lastMode
+            for redundant in modes.dropLast() {
+                NSLog("%@", "Disabling redundant mode source for \(modeID)...")
+                TISDisableInputSource(redundant)
+            }
+        } else {
+            modeSource = InputSourceHelper.inputMode(for: modeID)
         }
-        NSLog("Enabling input mode %@.", modeID)
-        guard InputSourceHelper.enable(inputSource: source) else {
-            NSLog("Cannot enable input mode %@.", modeID)
-            return 1
-        }
-        guard InputSourceHelper.waitUntilInputModeEnabled(modeID) else {
-            NSLog("Input mode %@ still not enabled.", modeID)
-            return 2
+
+        if let mode = modeSource {
+            NSLog("%@", "Enabling input mode \(modeID).")
+            _ = InputSourceHelper.enable(inputSource: mode)
+            if modeID == primaryModeID {
+                primaryModeSource = mode
+            }
         }
     }
 
-    guard InputSourceHelper.persistHIToolboxInputSources(
+    // 4. 持久化至 HIToolbox
+    _ = InputSourceHelper.persistHIToolboxInputSources(
         parentID: bundleID,
         modeIDs: modeIDs,
         selectedModeID: primaryModeID
-    ) else {
-        NSLog("Input source state was not persisted to HIToolbox.")
-        return 2
+    )
+
+    // 5. 選取主模式
+    if let primary = primaryModeSource {
+        NSLog("%@", "Selecting primary input mode \(primaryModeID).")
+        _ = InputSourceHelper.select(inputSource: primary)
     }
 
-    guard let primaryMode = InputSourceHelper.inputMode(for: primaryModeID) else {
-        NSLog("Cannot find primary input mode %@.", primaryModeID)
-        return 1
-    }
-    NSLog("Selecting input mode %@.", primaryModeID)
-    guard InputSourceHelper.select(inputSource: primaryMode) else {
-        NSLog("Cannot select input mode %@.", primaryModeID)
-        return 1
-    }
-    let selected = InputSourceHelper.waitUntilInputModeSelected(primaryModeID)
-    NSLog(selected ? "Input mode %@ enabled and selected." : "Input mode %@ enabled but not selected.", primaryModeID)
-    return selected ? 0 : 2
+    return 0
 }
 
 func uninstallInputMethod() -> Int32 {
     guard let bundleID = Bundle.main.bundleIdentifier else {
-        NSLog("Missing bundle identifier.")
+        NSLog("%@", "Missing bundle identifier.")
         return 1
     }
-    NSLog("Unpersisting input sources for %@", bundleID)
+    NSLog("%@", "Uninstalling and completely disabling input sources for \(bundleID)")
+
+    // 1. 遍歷 TIS 清單，對該 Bundle ID 的所有 Parent 與 Mode 強制呼叫 TISDisableInputSource
+    if let sourceList = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource] {
+        for src in sourceList {
+            let bundlePtr = TISGetInputSourceProperty(src, kTISPropertyBundleID)
+            let bID = bundlePtr != nil ? Unmanaged<CFString>.fromOpaque(bundlePtr!).takeUnretainedValue() as String : ""
+            if bID == bundleID {
+                NSLog("%@", "Disabling TIS input source: \(src)")
+                TISDisableInputSource(src)
+            }
+        }
+    }
+
+    // 2. 清除 HIToolbox 登錄
     _ = InputSourceHelper.unpersistHIToolboxInputSources(parentID: bundleID)
+
+    // 3. 清除 com.apple.inputsources 登錄
+    let thirdPartyKey = "AppleEnabledThirdPartyInputSources" as CFString
+    let inputsourcesPrefsID = "com.apple.inputsources" as CFString
+    if let list = CFPreferencesCopyAppValue(thirdPartyKey, inputsourcesPrefsID) as? [[String: Any]] {
+        let filtered = list.filter { ($0["Bundle ID"] as? String) != bundleID }
+        CFPreferencesSetAppValue(thirdPartyKey, filtered as CFPropertyList, inputsourcesPrefsID)
+        CFPreferencesAppSynchronize(inputsourcesPrefsID)
+    }
+
     return 0
 }
-
