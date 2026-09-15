@@ -1,38 +1,34 @@
 import AppKit
+import CoreGraphics
 
-// 1. Generate Bopomofo.tiff (22x16 pt, matching macOS input menu standard like vChewing)
-func createMenuIconRep(width: CGFloat, height: CGFloat, scale: CGFloat, fontSize: CGFloat) -> NSBitmapImageRep {
-    let pxW = Int(width * scale)
-    let pxH = Int(height * scale)
+func generateMenuIcon(widthPt: CGFloat, heightPt: CGFloat, scale: CGFloat, fontSize: CGFloat, yOffset: CGFloat) -> NSBitmapImageRep {
+    let pxW = Int(widthPt * scale)
+    let pxH = Int(heightPt * scale)
     
-    let rep = NSBitmapImageRep(
-        bitmapDataPlanes: nil,
-        pixelsWide: pxW,
-        pixelsHigh: pxH,
-        bitsPerSample: 8,
-        samplesPerPixel: 4,
-        hasAlpha: true,
-        isPlanar: false,
-        colorSpaceName: .deviceRGB,
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+    let ctx = CGContext(
+        data: nil,
+        width: pxW,
+        height: pxH,
+        bitsPerComponent: 8,
         bytesPerRow: pxW * 4,
-        bitsPerPixel: 32
+        space: colorSpace,
+        bitmapInfo: bitmapInfo.rawValue
     )!
-    rep.size = NSSize(width: width, height: height)
+    
+    ctx.scaleBy(x: scale, y: scale)
+    
+    let rect = CGRect(x: 0, y: 0, width: widthPt, height: heightPt)
+    let cornerRadius: CGFloat = 3.5
+    let path = CGPath(roundedRect: rect, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+    ctx.addPath(path)
+    ctx.setFillColor(red: 149.0/255.0, green: 211.0/255.0, blue: 206.0/255.0, alpha: 1.0)
+    ctx.fillPath()
     
     NSGraphicsContext.saveGraphicsState()
-    let context = NSGraphicsContext(bitmapImageRep: rep)!
-    NSGraphicsContext.current = context
-    
-    let transform = NSAffineTransform()
-    transform.scale(by: scale)
-    transform.concat()
-    
-    let rect = NSRect(x: 0, y: 0, width: width, height: height)
-    let cornerRadius: CGFloat = 3.5
-    let bgColor = NSColor(red: 149.0/255.0, green: 211.0/255.0, blue: 206.0/255.0, alpha: 1.0)
-    bgColor.setFill()
-    let path = NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius)
-    path.fill()
+    let nsc = NSGraphicsContext(cgContext: ctx, flipped: false)
+    NSGraphicsContext.current = nsc
     
     var font: NSFont?
     let fontNames = [
@@ -59,39 +55,40 @@ func createMenuIconRep(width: CGFloat, height: CGFloat, scale: CGFloat, fontSize
         .font: font!,
         .foregroundColor: NSColor.white,
         .paragraphStyle: paragraphStyle,
-        .kern: -0.3
+        .kern: -0.4
     ]
     
     let str = NSAttributedString(string: "行雲", attributes: attrs)
     let strSize = str.size()
     let textRect = NSRect(
-        x: (width - strSize.width) / 2.0,
-        y: (height - strSize.height) / 2.0 - 0.2,
+        x: (widthPt - strSize.width) / 2.0,
+        y: (heightPt - strSize.height) / 2.0 + yOffset,
         width: strSize.width,
         height: strSize.height
     )
     str.draw(in: textRect)
     
     NSGraphicsContext.restoreGraphicsState()
+    
+    let cgImg = ctx.makeImage()!
+    let rep = NSBitmapImageRep(cgImage: cgImg)
+    rep.size = NSSize(width: widthPt, height: heightPt)
     return rep
 }
 
-let w: CGFloat = 22.0
-let h: CGFloat = 16.0
-let rep1 = createMenuIconRep(width: w, height: h, scale: 1.0, fontSize: 11.0)
-let rep2 = createMenuIconRep(width: w, height: h, scale: 2.0, fontSize: 11.0)
+let rep1 = generateMenuIcon(widthPt: 22, heightPt: 16, scale: 1.0, fontSize: 10.0, yOffset: -0.1)
+let rep2 = generateMenuIcon(widthPt: 22, heightPt: 16, scale: 2.0, fontSize: 10.0, yOffset: -0.1)
 
-let menuImg = NSImage(size: NSSize(width: w, height: h))
+let menuImg = NSImage(size: NSSize(width: 22, height: 16))
 menuImg.addRepresentation(rep1)
 menuImg.addRepresentation(rep2)
 
-if let data = menuImg.tiffRepresentation {
-    let dest = URL(fileURLWithPath: "src/unifyIME/Resources/Bopomofo.tiff")
-    try! data.write(to: dest)
-    print("Generated 22x16 Bopomofo.tiff at \(dest.path)")
-}
+let tiffData = menuImg.tiffRepresentation!
+let dest = URL(fileURLWithPath: "src/unifyIME/Resources/Bopomofo.tiff")
+try! tiffData.write(to: dest)
+print("Generated 22x16 Bopomofo.tiff at \(dest.path)")
 
-// 2. Generate AppIcon.icns
+// AppIcon.icns
 func createAppIcon(size: CGFloat, text: String, cornerRadius: CGFloat) -> NSImage {
     let img = NSImage(size: NSSize(width: size, height: size))
     img.lockFocus()
