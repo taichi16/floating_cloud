@@ -40,15 +40,59 @@ mkdir -p "$HOME/Library/Input Methods"
 ditto "$SRC_APP" "$TARGET"
 codesign --force --sign - --timestamp=none "$TARGET" 2>/dev/null || true
 
-# 3. 向 macOS 核心註冊並重整選單
+# 3. 向 macOS LaunchServices 核心註冊
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET"
+
+# 4. 精準寫入 AppleEnabledInputSources 並透過 TIS 啟用
+swift -e '
+import Foundation
+import CoreFoundation
+import Carbon
+
+let domain = "com.apple.HIToolbox" as CFString
+let key = "AppleEnabledInputSources" as CFString
+
+if let currentVal = CFPreferencesCopyAppValue(key, domain) as? [[String: Any]] {
+    let targetItem: [String: Any] = [
+        "Bundle ID": "com.vader.inputmethod.XingYunIME",
+        "Input Mode": "com.vader.inputmethod.XingYunIME.Bopomofo",
+        "InputSourceKind": "Input Mode"
+    ]
+    var exists = false
+    for item in currentVal {
+        if let b = item["Bundle ID"] as? String, b == "com.vader.inputmethod.XingYunIME" {
+            exists = true
+            break
+        }
+    }
+    if !exists {
+        var newVal = currentVal
+        newVal.append(targetItem)
+        CFPreferencesSetAppValue(key, newVal as CFArray, domain)
+        CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+    }
+}
+
+if let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource] {
+    for s in list {
+        let idPtr = TISGetInputSourceProperty(s, kTISPropertyInputSourceID)
+        let id = idPtr != nil ? (Unmanaged<CFString>.fromOpaque(idPtr!).takeUnretainedValue() as String) : ""
+        if id == "com.vader.inputmethod.XingYunIME.Bopomofo" || id == "com.vader.inputmethod.XingYunIME" {
+            TISEnableInputSource(s)
+        }
+    }
+}
+'
+
+# 5. 啟動 App 並重整選單列
+open "$TARGET" 2>/dev/null || true
 killall TextInputMenuAgent TextInputSwitcher 2>/dev/null || true
 
 echo "=========================================="
-echo "        🎉 行雲_繁-A 安裝部署完成！"
+echo "        🎉 行雲_繁-A 安裝完成！"
 echo "=========================================="
-echo "應用程式已成功部署至您的輸入法目錄。"
+echo "已自動啟用並登錄於系統輸入法選單。"
 echo
 
-osascript -e 'display notification "行雲_繁-A 已成功部署至系統輸入法目錄。" with title "行雲_繁-A" subtitle "安裝成功"' 2>/dev/null || true
-osascript -e 'display dialog "行雲_繁-A 安裝部署完成！\n\n已成功放置於 ~/Library/Input Methods/。\n若右上角輸入法選單尚未出現，請至「系統設定」>「鍵盤」>「文字輸入」新增即可。" with title "行雲_繁-A 安裝程式" buttons {"完成"} default button "完成" with icon note' 2>/dev/null || true
+osascript -e 'display notification "行雲_繁-A 已成功啟用！" with title "行雲_繁-A" subtitle "安裝成功"' 2>/dev/null || true
+osascript -e 'display dialog "行雲_繁-A 安裝完成！\n\n已成功啟用並加入輸入法選單，您可直接切換使用。" with title "行雲_繁-A 安裝程式" buttons {"完成"} default button "完成" with icon note' 2>/dev/null || true
