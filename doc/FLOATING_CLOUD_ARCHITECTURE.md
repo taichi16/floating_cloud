@@ -6,8 +6,8 @@
 
 - **工作目錄**：`/Users/taichi/AI/floating_cloud`
 - **發布 Bundle**：`行雲_繁-A.app`
-- **Bundle Identifier**：`com.vader.inputmethod.FloatingCloud`
-- **輸入模式識別**：`com.vader.inputmethod.FloatingCloud.Bopomofo`
+- **Bundle Identifier**：`com.vader.inputmethod.XingYun`
+- **輸入模式識別**：`com.vader.inputmethod.XingYun.Bopomofo`
 - **版本保護**：本專案為完全獨立之專案空間，不更動亦不污染「全一_Extreme」原始碼。未經指示不推送至任何既有遠端倉庫。
 
 ---

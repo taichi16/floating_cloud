@@ -10,11 +10,11 @@
 	<true/>
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
 	<array>
-		<string>/Library/Preferences/com.vader.inputmethod.FloatingCloud.plist</string>
+		<string>/Library/Preferences/com.vader.inputmethod.XingYun.plist</string>
 	</array>
 	<key>com.apple.security.temporary-exception.mach-register.global-name</key>
-	<string>com.vader.inputmethod.FloatingCloud_Connection</string>
+	<string>com.vader.inputmethod.XingYun_Connection</string>
 	<key>com.apple.security.temporary-exception.shared-preference.read-only</key>
-	<string>com.vader.inputmethod.FloatingCloud</string>
+	<string>com.vader.inputmethod.XingYun</string>
 </dict>
 </plist>

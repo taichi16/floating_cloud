@@ -13,7 +13,7 @@
 	<key>CFBundleIconName</key>
 	<string>Bopomofo</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.vader.inputmethod.FloatingCloud</string>
+	<string>com.vader.inputmethod.XingYun</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -30,7 +30,7 @@
 	<dict>
 		<key>tsInputModeListKey</key>
 		<dict>
-			<key>com.vader.inputmethod.FloatingCloud.Bopomofo</key>
+			<key>com.vader.inputmethod.XingYun.Bopomofo</key>
 			<dict>
 				<key>TISDoubleSpaceSubstitution</key>
 				<string>。</string>
@@ -40,7 +40,7 @@
 					<string>行雲_繁-A</string>
 				</dict>
 				<key>TISInputSourceID</key>
-				<string>com.vader.inputmethod.FloatingCloud.Bopomofo</string>
+				<string>com.vader.inputmethod.XingYun.Bopomofo</string>
 				<key>TISIntendedLanguage</key>
 				<string>zh-Hant</string>
 				<key>tsInputModeAlternateMenuIconFileKey</key>
@@ -68,11 +68,11 @@
 		</dict>
 		<key>tsVisibleInputModeOrderedArrayKey</key>
 		<array>
-			<string>com.vader.inputmethod.FloatingCloud.Bopomofo</string>
+			<string>com.vader.inputmethod.XingYun.Bopomofo</string>
 		</array>
 	</dict>
 	<key>InputMethodConnectionName</key>
-	<string>com.vader.inputmethod.FloatingCloud_Connection</string>
+	<string>com.vader.inputmethod.XingYun_Connection</string>
 	<key>InputMethodServerControllerClass</key>
 	<string>SessionCtl</string>
 	<key>InputMethodServerDelegateClass</key>
@@ -97,7 +97,7 @@
 		<string>行雲_繁-A</string>
 	</dict>
 	<key>TISInputSourceID</key>
-	<string>com.vader.inputmethod.FloatingCloud</string>
+	<string>com.vader.inputmethod.XingYun</string>
 	<key>TISIntendedLanguage</key>
 	<string>zh-Hant</string>
 	<key>TISParticipatesInTouchBar</key>
