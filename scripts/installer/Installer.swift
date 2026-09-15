@@ -1,8 +1,7 @@
 import AppKit
 
-// 安裝僅作用於目前使用者，不需要管理員權限。
 enum Installation {
-    static let appName = "全一輸入法.app"
+    static let appName = "行雲_繁-A.app"
     static let registrar = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
     @discardableResult
@@ -18,7 +17,7 @@ enum Installation {
         process.waitUntilExit()
         let output = String(data: data, encoding: .utf8) ?? ""
         guard process.terminationStatus == 0 else {
-            throw NSError(domain: "UnifyIMEInstaller", code: Int(process.terminationStatus),
+            throw NSError(domain: "FloatingCloudInstaller", code: Int(process.terminationStatus),
                 userInfo: [NSLocalizedDescriptionKey: "\(URL(fileURLWithPath: executable).lastPathComponent) 執行失敗：\n\(output)"])
         }
         return output
@@ -26,12 +25,12 @@ enum Installation {
 
     static func payload() throws -> URL {
         guard let resource = Bundle.main.resourceURL else {
-            throw NSError(domain: "UnifyIMEInstaller", code: 1, userInfo: [NSLocalizedDescriptionKey: "找不到安裝資源。"])
+            throw NSError(domain: "FloatingCloudInstaller", code: 1, userInfo: [NSLocalizedDescriptionKey: "找不到安裝資源。"])
         }
         let source = resource.appendingPathComponent(appName)
         try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", source.path])
         guard FileManager.default.isExecutableFile(atPath: source.appendingPathComponent("Contents/MacOS/UnifyIME").path) else {
-            throw NSError(domain: "UnifyIMEInstaller", code: 2, userInfo: [NSLocalizedDescriptionKey: "安裝檔不完整，請重新下載。"])
+            throw NSError(domain: "FloatingCloudInstaller", code: 2, userInfo: [NSLocalizedDescriptionKey: "安裝檔不完整，請重新下載。"])
         }
         return source
     }
@@ -56,7 +55,7 @@ enum Installation {
         let directory = fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Input Methods", isDirectory: true)
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         let destination = directory.appendingPathComponent(appName)
-        let stage = directory.appendingPathComponent(".unifyime-install-\(UUID().uuidString)", isDirectory: true)
+        let stage = directory.appendingPathComponent(".xingyun-install-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: stage, withIntermediateDirectories: false)
         let incoming = stage.appendingPathComponent(appName)
         let backup = stage.appendingPathComponent("舊版.app.bak")
@@ -70,6 +69,12 @@ enum Installation {
             try fm.moveItem(at: incoming, to: destination)
             try run(registrar, ["-f", destination.path])
             _ = try? run("/usr/bin/killall", ["UnifyIME"])
+            _ = try? run("/usr/bin/killall", ["TextInputMenuAgent"])
+            _ = try? run("/usr/bin/killall", ["TextInputSwitcher"])
+            let binary = destination.appendingPathComponent("Contents/MacOS/UnifyIME")
+            if fm.isExecutableFile(atPath: binary.path) {
+                _ = try? run(binary.path, ["install"])
+            }
             try launch(destination)
         } catch {
             let installError = error
@@ -83,7 +88,7 @@ enum Installation {
                 }
             } catch {
                 keepBackup = true
-                throw NSError(domain: "UnifyIMEInstaller", code: 3, userInfo: [NSLocalizedDescriptionKey: "安裝失敗，舊版備份保留於：\(backup.path)\n\(installError.localizedDescription)\n還原失敗：\(error.localizedDescription)"])
+                throw NSError(domain: "FloatingCloudInstaller", code: 3, userInfo: [NSLocalizedDescriptionKey: "安裝失敗，舊版備份保留於：\(backup.path)\n\(installError.localizedDescription)\n還原失敗：\(error.localizedDescription)"])
             }
             throw installError
         }
@@ -97,9 +102,9 @@ final class InstallerDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 170),
             styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = "安裝全一輸入法"
+        window.title = "安裝 行雲_繁-A"
         window.center()
-        let label = NSTextField(wrappingLabelWithString: "正在安裝全一輸入法…\n更新時會自動備份並重新啟動輸入法。")
+        let label = NSTextField(wrappingLabelWithString: "正在安裝 行雲_繁-A…\n更新時會自動備份並重新啟動輸入法。")
         label.frame = NSRect(x: 30, y: 75, width: 380, height: 60)
         let spinner = NSProgressIndicator(frame: NSRect(x: 30, y: 35, width: 380, height: 20))
         spinner.style = .bar
@@ -120,8 +125,8 @@ final class InstallerDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         switch result {
         case .success:
-            alert.messageText = "全一輸入法安裝完成"
-            alert.informativeText = "首次使用：請在 macOS「鍵盤」設定的輸入來源中加入「全一輸入法」。若清單尚未出現，請登出後重新登入。\n\n更新使用者可直接切換回全一輸入法。"
+            alert.messageText = "行雲_繁-A 安裝完成"
+            alert.informativeText = "已成功安裝並套用薄荷青「行雲」輸入法。\n若選單列尚未自動切換，可直接按 Control + 空白鍵 或在右上角輸入法選單中選取。"
             alert.addButton(withTitle: "開啟鍵盤設定")
             alert.addButton(withTitle: "完成")
         case .failure(let error):
