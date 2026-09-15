@@ -7,6 +7,7 @@ INSTALL_DIR="$HOME/Library/Input Methods/$APP_NAME"
 SRC_DIR="$DIR/src/unifyIME"
 BIN_APP="$DIR/bin/app/$APP_NAME"
 DIST_APP="$DIR/dist/$APP_NAME"
+LOCAL_APP="$DIR/$APP_NAME"
 
 echo "=========================================="
 echo "         行雲_繁-A - 自動安裝程式         "
@@ -15,14 +16,18 @@ echo
 
 # 1. 檢查並定位安裝來源
 SOURCE_APP=""
-if [[ -d "$DIST_APP" ]]; then
+if [[ -d "$LOCAL_APP" ]]; then
+    SOURCE_APP="$LOCAL_APP"
+elif [[ -d "$DIST_APP" ]]; then
     SOURCE_APP="$DIST_APP"
 elif [[ -d "$BIN_APP" ]]; then
     SOURCE_APP="$BIN_APP"
 elif [[ -f "$DIR/build.command" ]]; then
     echo "🔨 正在建置最新版本的 行雲_繁-A..."
     "$DIR/build.command"
-    if [[ -d "$DIST_APP" ]]; then
+    if [[ -d "$LOCAL_APP" ]]; then
+        SOURCE_APP="$LOCAL_APP"
+    elif [[ -d "$DIST_APP" ]]; then
         SOURCE_APP="$DIST_APP"
     elif [[ -d "$BIN_APP" ]]; then
         SOURCE_APP="$BIN_APP"
