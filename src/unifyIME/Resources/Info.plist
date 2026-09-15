@@ -4,18 +4,18 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
-	<key>CFBundleExecutable</key>
-	<string>UnifyIME</string>
 	<key>CFBundleDisplayName</key>
 	<string>行雲_繁-A</string>
-	<key>CFBundleIdentifier</key>
-	<string>com.vader.inputmethod.FloatingCloud</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
+	<key>CFBundleExecutable</key>
+	<string>UnifyIME</string>
 	<key>CFBundleIconFile</key>
 	<string>Bopomofo</string>
 	<key>CFBundleIconName</key>
 	<string>Bopomofo</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.vader.inputmethod.FloatingCloud</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>行雲_繁-A</string>
 	<key>CFBundlePackageType</key>
@@ -34,13 +34,15 @@
 			<dict>
 				<key>TISDoubleSpaceSubstitution</key>
 				<string>。</string>
-				<key>TISIntendedLanguage</key>
-				<string>zh-Hant</string>
 				<key>TISIconLabels</key>
 				<dict>
 					<key>Primary</key>
 					<string>行雲_繁-A</string>
 				</dict>
+				<key>TISInputSourceID</key>
+				<string>com.vader.inputmethod.FloatingCloud.Bopomofo</string>
+				<key>TISIntendedLanguage</key>
+				<string>zh-Hant</string>
 				<key>tsInputModeAlternateMenuIconFileKey</key>
 				<string>Bopomofo.tiff</string>
 				<key>tsInputModeCharacterRepertoireKey</key>
@@ -89,15 +91,15 @@
 	<string>NSApplication</string>
 	<key>TICapsLockLanguageSwitchCapable</key>
 	<true/>
-	<key>TISInputSourceID</key>
-	<string>com.vader.inputmethod.FloatingCloud</string>
-	<key>TISIntendedLanguage</key>
-	<string>zh-Hant</string>
 	<key>TISIconLabels</key>
 	<dict>
 		<key>Primary</key>
 		<string>行雲_繁-A</string>
 	</dict>
+	<key>TISInputSourceID</key>
+	<string>com.vader.inputmethod.FloatingCloud</string>
+	<key>TISIntendedLanguage</key>
+	<string>zh-Hant</string>
 	<key>TISParticipatesInTouchBar</key>
 	<false/>
 	<key>tsInputMethodCharacterRepertoireKey</key>

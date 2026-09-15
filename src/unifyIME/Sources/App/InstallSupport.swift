@@ -20,12 +20,15 @@ func installInputMethod() -> Int32 {
         return 1
     }
 
-    if InputSourceHelper.inputMode(for: primaryModeID) == nil {
+    let alreadyRegistered = (InputSourceHelper.inputSource(for: bundleID) != nil) || (InputSourceHelper.inputMode(for: primaryModeID) != nil)
+    if !alreadyRegistered {
         NSLog("Registering input source %@ at %@", bundleID, bundleURL.absoluteString)
         guard InputSourceHelper.registerInputSource(at: bundleURL) else {
             NSLog("Cannot register input source %@.", bundleID)
             return 1
         }
+    } else {
+        NSLog("Input source %@ already registered in TIS, skipping duplicate registration.", bundleID)
     }
 
     // macOS 對輸入法採用「父輸入來源 + 子輸入模式」兩層狀態。
