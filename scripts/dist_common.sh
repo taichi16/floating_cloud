@@ -1,20 +1,9 @@
 #!/bin/zsh
-# 共用產物清理：只處理專案根目錄下的 dist。
+# 徹底清理產物，絕不移入垃圾桶，避免 LaunchServices 重複索引 Ghost App
 move_to_trash() {
   local target="$1"
   [[ -e "$target" || -L "$target" ]] || return 0
-
-  local trash_directory="$HOME/.Trash"
-  mkdir -p "$trash_directory"
-  local base_name="${target:t}"
-  local destination="$trash_directory/$base_name"
-  local suffix=0
-  while [[ -e "$destination" || -L "$destination" ]]; do
-    suffix=$((suffix + 1))
-    destination="$trash_directory/${base_name}.unifyime-$(date '+%Y%m%d%H%M%S')-$$-$suffix"
-  done
-  mv -- "$target" "$destination"
-  print "已移至 Trash：$target -> $destination"
+  rm -rf -- "$target"
 }
 
 clear_project_dist() {
@@ -27,7 +16,6 @@ clear_project_dist() {
   mkdir -p "$dist_directory"
   local entry
   for entry in "$dist_directory"/*(DN); do
-    move_to_trash "$entry"
+    rm -rf -- "$entry"
   done
-  print "已清空：$dist_directory"
 }
