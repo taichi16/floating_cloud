@@ -50,8 +50,8 @@ fi
 # 6. 移至垃圾桶
 if [[ -d "$INSTALL_DIR" ]]; then
     echo "🗑️ 正在移除 $INSTALL_DIR ..."
-    TRASH_DEST="$HOME/.Trash/行雲_繁-A_已反安裝_$(date +%Y%m%d%H%M%S).app"
-    mv "$INSTALL_DIR" "$TRASH_DEST" 2>/dev/null || rm -rf "$INSTALL_DIR"
+    rm -rf "$INSTALL_DIR"
+    
 fi
 
 # 7. 重新整理輸入法選單進程

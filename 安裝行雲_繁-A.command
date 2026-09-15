@@ -53,8 +53,8 @@ mkdir -p "$HOME/Library/Input Methods"
 # 若已有舊版，先清理至垃圾桶備份
 if [[ -d "$INSTALL_DIR" ]]; then
     echo "🔄 偵測到現有版本，正在移至垃圾桶備份..."
-    TRASH_DEST="$HOME/.Trash/行雲_繁-A_備份_$(date +%Y%m%d%H%M%S).app"
-    mv "$INSTALL_DIR" "$TRASH_DEST" 2>/dev/null || rm -rf "$INSTALL_DIR"
+    rm -rf "$INSTALL_DIR"
+    
 fi
 
 ditto "$SOURCE_APP" "$INSTALL_DIR"
