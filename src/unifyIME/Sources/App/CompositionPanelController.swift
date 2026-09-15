@@ -17,8 +17,8 @@ final class CompositionPanelController: NSWindowController {
             defer: false
         )
         panel.level = .statusBar
-        panel.isOpaque = true
-        panel.backgroundColor = NSColor.windowBackgroundColor
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -31,13 +31,14 @@ final class CompositionPanelController: NSWindowController {
         panel.contentView = content
 
         bubble = NSVisualEffectView(frame: rect)
-        bubble.material = .windowBackground
+        bubble.material = .popover
+        bubble.blendingMode = .behindWindow
         bubble.state = .active
         bubble.wantsLayer = true
         bubble.layer?.cornerRadius = 10
         bubble.layer?.masksToBounds = true
-        bubble.layer?.borderWidth = 2
-        bubble.layer?.borderColor = NSColor.separatorColor.cgColor
+        bubble.layer?.borderWidth = 0.5
+        bubble.layer?.borderColor = NSColor.white.withAlphaComponent(0.25).cgColor
         content.addSubview(bubble)
 
         contentLabel.font = .monospacedSystemFont(ofSize: 24, weight: .medium)

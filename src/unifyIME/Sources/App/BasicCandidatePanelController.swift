@@ -53,72 +53,81 @@ final class BasicCandidatePanelController: NSWindowController {
         var rowStartIndex = 0
         var candidates: [String] = []
         var selectedIndex = 0
-        var lineHeight: CGFloat = 18
+        var lineHeight: CGFloat = 22
         var horizontalPadding: CGFloat = 8
-        var verticalPadding: CGFloat = 10
+        var verticalPadding: CGFloat = 8
         var numberColumnWidth: CGFloat = 20
         var separatorX: CGFloat = 31
-        var arrowColumnLeading: CGFloat = 39
-        var arrowColumnWidth: CGFloat = 18
-        var contentColumnLeading: CGFloat = 65
+        var contentColumnLeading: CGFloat = 38
 
-        let numberFont = NSFont.monospacedDigitSystemFont(ofSize: 15, weight: .regular)
-        let arrowFont = NSFont.systemFont(ofSize: 16, weight: .regular)
+        let numberFont = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .medium)
         let contentFont = NSFont.systemFont(ofSize: 16, weight: .regular)
+        let contentBoldFont = NSFont.systemFont(ofSize: 16, weight: .semibold)
 
         override var isFlipped: Bool { true }
 
         override func draw(_ dirtyRect: NSRect) {
             super.draw(dirtyRect)
 
-            NSColor.separatorColor.withAlphaComponent(0.3).setFill()
-            NSRect(
-                x: separatorX,
-                y: verticalPadding,
-                width: 1,
-                height: bounds.height - (verticalPadding * 2)
-            ).fill()
-
             for (offset, value) in candidates.enumerated() {
                 let absoluteIndex = rowStartIndex + offset
                 let rowY = verticalPadding + (CGFloat(offset) * lineHeight)
+                let isSelected = (absoluteIndex == selectedIndex)
 
+                // 1. Draw modern mint pill selection background
+                if isSelected {
+                    let pillRect = NSRect(
+                        x: horizontalPadding - 3,
+                        y: rowY - 1,
+                        width: bounds.width - ((horizontalPadding - 3) * 2),
+                        height: lineHeight + 2
+                    )
+                    // #95D3CE (RGB: 149, 211, 206) Accent Pill
+                    let pillColor = NSColor(red: 149.0/255.0, green: 211.0/255.0, blue: 206.0/255.0, alpha: 0.95)
+                    pillColor.setFill()
+                    let pillPath = NSBezierPath(roundedRect: pillRect, xRadius: 6, yRadius: 6)
+                    pillPath.fill()
+                }
+
+                // 2. Draw number index
+                let numberColor: NSColor
+                if isSelected {
+                    numberColor = NSColor(red: 16.0/255.0, green: 60.0/255.0, blue: 55.0/255.0, alpha: 0.85)
+                } else {
+                    numberColor = NSColor.secondaryLabelColor
+                }
                 let numberAttrs: [NSAttributedString.Key: Any] = [
                     .font: numberFont,
-                    .foregroundColor: NSColor.tertiaryLabelColor
+                    .foregroundColor: numberColor
                 ]
                 let numberText = NSString(string: "\(absoluteIndex + 1)")
                 let numberSize = numberText.size(withAttributes: numberAttrs)
+                let numberY = rowY + floor((lineHeight - numberSize.height) / 2)
                 numberText.draw(
                     at: CGPoint(
                         x: horizontalPadding + numberColumnWidth - numberSize.width,
-                        y: rowY
+                        y: numberY
                     ),
                     withAttributes: numberAttrs
                 )
 
-                if absoluteIndex == selectedIndex {
-                    let arrowAttrs: [NSAttributedString.Key: Any] = [
-                        .font: arrowFont,
-                        .foregroundColor: NSColor.systemRed
-                    ]
-                    let arrowText = NSString(string: "▶")
-                    let arrowSize = arrowText.size(withAttributes: arrowAttrs)
-                    arrowText.draw(
-                        at: CGPoint(
-                            x: arrowColumnLeading + floor((arrowColumnWidth - arrowSize.width) / 2),
-                            y: rowY
-                        ),
-                        withAttributes: arrowAttrs
-                    )
+                // 3. Draw candidate text
+                let textColor: NSColor
+                let textFont: NSFont
+                if isSelected {
+                    textColor = NSColor(red: 10.0/255.0, green: 40.0/255.0, blue: 36.0/255.0, alpha: 1.0)
+                    textFont = contentBoldFont
+                } else {
+                    textColor = NSColor.labelColor
+                    textFont = contentFont
                 }
-
                 let contentAttrs: [NSAttributedString.Key: Any] = [
-                    .font: contentFont,
-                    .foregroundColor: NSColor.labelColor
+                    .font: textFont,
+                    .foregroundColor: textColor
                 ]
+                let textY = rowY + floor((lineHeight - textFont.pointSize) / 2) - 1
                 NSString(string: value).draw(
-                    at: CGPoint(x: contentColumnLeading, y: rowY),
+                    at: CGPoint(x: contentColumnLeading, y: textY),
                     withAttributes: contentAttrs
                 )
             }
@@ -134,13 +143,13 @@ final class BasicCandidatePanelController: NSWindowController {
         let rect = NSRect(x: 0, y: 0, width: 168, height: 240)
         let panel = NSPanel(
             contentRect: rect,
-            styleMask: [.nonactivatingPanel],
+            styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: false
         )
         panel.level = .statusBar
-        panel.isOpaque = true
-        panel.backgroundColor = NSColor.windowBackgroundColor
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -152,14 +161,16 @@ final class BasicCandidatePanelController: NSWindowController {
         let content = NSView(frame: rect)
         panel.contentView = content
 
+        // Frosted liquid glass effect
         bubble = NSVisualEffectView(frame: rect)
-        bubble.material = .windowBackground
+        bubble.material = .popover
+        bubble.blendingMode = .behindWindow
         bubble.state = .active
         bubble.wantsLayer = true
         bubble.layer?.cornerRadius = 10
         bubble.layer?.masksToBounds = true
-        bubble.layer?.borderWidth = 0
-        bubble.layer?.borderColor = NSColor.clear.cgColor
+        bubble.layer?.borderWidth = 0.5
+        bubble.layer?.borderColor = NSColor.white.withAlphaComponent(0.25).cgColor
         content.addSubview(bubble)
 
         listView.wantsLayer = true
@@ -201,22 +212,20 @@ final class BasicCandidatePanelController: NSWindowController {
         let visibleCount = min(maxVisibleRows, candidates.count)
         let startIndex = min(max(0, safeIndex - visibleCount / 2), max(0, candidates.count - visibleCount))
         let horizontalPadding: CGFloat = 8
-        let verticalPadding: CGFloat = 10
-        let numberColumnWidth: CGFloat = 20
-        let arrowColumnWidth: CGFloat = 18
-        let separatorX = horizontalPadding + numberColumnWidth + 3
-        let arrowColumnLeading: CGFloat = separatorX + 8
+        let verticalPadding: CGFloat = 8
+        let numberColumnWidth: CGFloat = 16
         let textGap: CGFloat = 8
-        let contentColumnLeading: CGFloat = arrowColumnLeading + arrowColumnWidth + textGap
+        let contentColumnLeading: CGFloat = horizontalPadding + numberColumnWidth + textGap
         let visibleCandidates = Array(candidates[startIndex..<(startIndex + visibleCount)])
-        let font = listView.contentFont
+        let font = listView.contentBoldFont
         let valueAttrs: [NSAttributedString.Key: Any] = [.font: font]
         let valueWidest = visibleCandidates
             .map { ceil(($0 as NSString).size(withAttributes: valueAttrs).width) }
-            .max() ?? 80
-        let lineHeight = ceil(font.ascender - font.descender) + 1
-        let height = CGFloat(max(visibleCount, 4)) * lineHeight + (verticalPadding * 2) + 2
-        let width = min(max(contentColumnLeading + valueWidest + horizontalPadding + 2, 110), 172)
+            .max() ?? 60
+        let lineHeight: CGFloat = 24
+        let height = CGFloat(visibleCount) * lineHeight + (verticalPadding * 2)
+        let width = min(max(contentColumnLeading + valueWidest + horizontalPadding + 6, 96), 180)
+        
         window.setContentSize(NSSize(width: width, height: height))
         window.contentView?.frame = NSRect(x: 0, y: 0, width: width, height: height)
         bubble.frame = NSRect(x: 0, y: 0, width: width, height: height)
@@ -228,9 +237,6 @@ final class BasicCandidatePanelController: NSWindowController {
         listView.horizontalPadding = horizontalPadding
         listView.verticalPadding = verticalPadding
         listView.numberColumnWidth = numberColumnWidth
-        listView.separatorX = separatorX
-        listView.arrowColumnLeading = arrowColumnLeading
-        listView.arrowColumnWidth = arrowColumnWidth
         listView.contentColumnLeading = contentColumnLeading
 
         if let anchor, let screen = screenVisibleFrame(containing: anchor) {
