@@ -10,6 +10,7 @@ BUILD_DIR="$DIR/build/.dmg_temp.noindex"
 DMG_VOLNAME="行雲_繁-A 安裝磁碟"
 DMG_NAME="行雲_繁-A_安裝磁碟.dmg"
 OUTPUT_DMG="$DIST_DIR/$DMG_NAME"
+DMG_ICON="$DIR/src/unifyIME/Resources/dmg_icon.icns"
 
 echo "=========================================="
 echo "         行雲_繁-A - DMG 封裝程式         "
@@ -78,6 +79,14 @@ cat << 'README_EOF' > "$BUILD_DIR/使用說明.txt"
 然後於「系統設定」>「鍵盤」>「文字輸入」新增即可。
 README_EOF
 
+# 設定 DMG 自訂磁碟外觀圖標
+if [[ -f "$DMG_ICON" ]]; then
+    echo "🎨 正在套用磁碟專屬外觀圖標..."
+    cp "$DMG_ICON" "$BUILD_DIR/.VolumeIcon.icns"
+    SetFile -c icnC "$BUILD_DIR/.VolumeIcon.icns" 2>/dev/null || true
+    SetFile -a C "$BUILD_DIR" 2>/dev/null || true
+fi
+
 # 確保權限
 chmod +x "$BUILD_DIR/安裝行雲_繁-A.command"
 chmod +x "$BUILD_DIR/反安裝行雲_繁-A.command"
@@ -101,6 +110,17 @@ echo "       🎉 DMG 映像檔封裝完成！"
 echo "=========================================="
 echo "檔案位置: $OUTPUT_DMG"
 echo "檔案大小: $(du -sh "$OUTPUT_DMG" | cut -f1)"
+
+# 為 .dmg 檔案本身套用 Finder 自訂圖標
+if [[ -f "$DMG_ICON" && -f "$OUTPUT_DMG" ]]; then
+    swift -e '
+    import AppKit
+    let args = CommandLine.arguments
+    guard args.count >= 3 else { exit(0) }
+    let icon = NSImage(contentsOfFile: args[1])
+    NSWorkspace.shared.setIcon(icon, forFile: args[2], options: [])
+    ' "$DMG_ICON" "$OUTPUT_DMG" 2>/dev/null || true
+fi
 
 # 移除 dist/ 中裸露的 .app，只保留 .dmg，防止 macOS LaunchServices 重複掃描
 rm -rf "$DIST_APP" 2>/dev/null || true
