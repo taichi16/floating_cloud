@@ -6,7 +6,7 @@ APP_NAME="行雲_繁-A.app"
 BIN_APP="$DIR/bin/app/$APP_NAME"
 DIST_APP="$DIR/dist/$APP_NAME"
 DIST_DIR="$DIR/dist"
-BUILD_DIR="$DIR/build/dmg_temp"
+BUILD_DIR="$DIR/build/.dmg_temp.noindex"
 DMG_VOLNAME="行雲_繁-A 安裝磁碟"
 DMG_NAME="行雲_繁-A_安裝磁碟.dmg"
 OUTPUT_DMG="$DIST_DIR/$DMG_NAME"
@@ -101,6 +101,12 @@ echo "       🎉 DMG 映像檔封裝完成！"
 echo "=========================================="
 echo "檔案位置: $OUTPUT_DMG"
 echo "檔案大小: $(du -sh "$OUTPUT_DMG" | cut -f1)"
+
+# 移除 dist/ 中裸露的 .app，只保留 .dmg，防止 macOS LaunchServices 重複掃描
+rm -rf "$DIST_APP" 2>/dev/null || true
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$DIST_APP" 2>/dev/null || true
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$BIN_APP" 2>/dev/null || true
+
 echo
 
 osascript -e 'display notification "行雲_繁-A DMG 封裝完成！" with title "DMG 打包程式" subtitle "封裝成功"' 2>/dev/null || true

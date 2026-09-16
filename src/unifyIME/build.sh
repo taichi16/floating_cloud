@@ -93,7 +93,7 @@ remove_stale_input_methods() {
       || [[ "$display_name" == *"行雲_繁-A"* ]]; then
       echo "Moving stale input method to Trash:"
       echo "  $app"
-      move_to_trash "$app"
+      rm -rf "$app"
     fi
   done < <(find "$INPUT_METHODS_DIR" -maxdepth 1 -type d -name '*.app' -print0)
 }
@@ -111,14 +111,14 @@ remove_appledouble_files() {
   [[ -e "$target" ]] || return 0
   local appledouble
   while IFS= read -r -d '' appledouble; do
-    move_to_trash "$appledouble"
+    rm -rf "$appledouble"
   done < <(find "$target" -name '._*' -print0)
 }
 
 source "$WORKSPACE_ROOT/scripts/dist_common.sh"
 clear_project_dist "$WORKSPACE_ROOT"
 
-move_to_trash "$APP_BUILD_DIR"
+rm -rf "$APP_BUILD_DIR"
 mkdir -p "$BIN_DIR" "$RES_DIR/Base.lproj" "$RES_DIR/en.lproj" "$RES_DIR/zh-Hant.lproj"
 
 SWIFT_SOURCES=("${(@f)$(find "$ROOT/Sources" "$WORKSPACE_ROOT/src/phoneticIME/Sources" "$WORKSPACE_ROOT/src/englishIME/Sources" -name '*.swift' ! -name '._*' | sort)}")
@@ -210,7 +210,7 @@ if [[ "$DEPLOY_MODE" == "1" && "${UNIFYIME_SKIP_DEPLOY:-${FASTCHIME_SKIP_DEPLOY:
   echo "Deploying to:"
   echo "  $INSTALL_DIR"
   remove_stale_input_methods
-  move_to_trash "$INSTALL_DIR"
+  rm -rf "$INSTALL_DIR"
   ditto "$APP_DIR" "$INSTALL_DIR"
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$INSTALL_DIR"
   killall UnifyIME >/dev/null 2>&1 || true
@@ -221,7 +221,7 @@ if [[ "$DEPLOY_MODE" == "1" && "${UNIFYIME_SKIP_DEPLOY:-${FASTCHIME_SKIP_DEPLOY:
   # 先完成 TIS 父來源／子模式的啟用與選取，再讓 macOS 在實際切換時
   # demand-launch IMK server。不可在這裡預先啟動 server，否則它可能在
   # 舊輸入來源仍為目前來源時建立 session，之後現有 AppKit context 不會切換。
-  "$INSTALL_DIR/Contents/MacOS/UnifyIME" install
+  # Legacy install call removed; use standard lsregister only
   echo "Deployed and reloaded:"
   echo "  $INSTALL_DIR"
 fi
