@@ -5,6 +5,10 @@
 ![macOS Version](https://img.shields.io/badge/macOS-13.0%2B-blue)
 ![Swift](https://img.shields.io/badge/Swift-6.0-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
+[![Release](https://img.shields.io/github/v/release/taichi16/floating_cloud?color=brightgreen&label=下載最新%20DMG)](https://github.com/taichi16/floating_cloud/releases/latest)
+
+> 💡 **一般使用者快速安裝**：
+> 請至右側 👉 [**Releases 頁面**](https://github.com/taichi16/floating_cloud/releases/latest) 下載 **`行雲_繁-A_安裝磁碟.dmg`**，打開後雙擊「**安裝行雲_繁-A.command**」即可一鍵完成安裝！
 
 ---
 

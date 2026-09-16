@@ -129,5 +129,7 @@ rm -rf "$DIST_APP" 2>/dev/null || true
 
 echo
 
-osascript -e 'display notification "行雲_繁-A DMG 封裝完成！" with title "DMG 打包程式" subtitle "封裝成功"' 2>/dev/null || true
-osascript -e "display dialog \"行雲_繁-A DMG 封裝完成！\n\n已成功產出安裝映像檔：\n$OUTPUT_DMG\" with title \"DMG 封裝程式\" buttons {\"開啟所在目錄\", \"完成\"} default button \"完成\" with icon note" 2>/dev/null || true
+if [[ "${CI:-}" != "true" ]]; then
+    osascript -e 'display notification "行雲_繁-A DMG 封裝完成！" with title "DMG 打包程式" subtitle "封裝成功"' 2>/dev/null || true
+    osascript -e "display dialog \"行雲_繁-A DMG 封裝完成！\n\n已成功產出安裝映像檔：\n$OUTPUT_DMG\" with title \"DMG 封裝程式\" buttons {\"開啟所在目錄\", \"完成\"} default button \"完成\" with icon note" 2>/dev/null || true
+fi
