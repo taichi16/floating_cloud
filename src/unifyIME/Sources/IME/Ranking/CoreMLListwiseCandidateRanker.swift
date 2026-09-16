@@ -83,7 +83,7 @@ struct CoreMLListwiseCandidateRanker {
             configuration.optimizationHints.reshapeFrequency = .infrequent
         }
         if #available(macOS 15.0, *) {
-            configuration.optimizationHints.specializationStrategy = .fastPrediction
+            (configuration.optimizationHints as AnyObject).setValue?(0, forKey: "specializationStrategy")
         }
         let loaded = url.flatMap { try? MLModel(contentsOf: $0, configuration: configuration) }
         guard let loaded else {

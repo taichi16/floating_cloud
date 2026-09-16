@@ -110,6 +110,8 @@ private let kCandidateTextPaddingWithMandatedTableViewPadding: CGFloat = 18.0
 private let kCandidateTextLeftMarginWithMandatedTableViewPadding: CGFloat = 0.0
 
 // Only used in macOS 10.15 (Catalina) or lower
+
+import AppKit
 private class BackgroundView: NSView {
     override func draw(_: NSRect) {
         NSColor.windowBackgroundColor.setFill()
