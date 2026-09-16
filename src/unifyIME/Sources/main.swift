@@ -1050,7 +1050,18 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
             _ = commitCurrentComposition(client, reason: "applicationShortcut")
             return false
         }
-        if shortcutModifiers == [.shift] {
+        let isShiftLetter: Bool = {
+            guard shortcutModifiers == [.shift] else { return false }
+            if let raw = event.charactersIgnoringModifiers?.lowercased(),
+               raw.count == 1,
+               let s = raw.unicodeScalars.first,
+               s.isASCII && CharacterSet.letters.contains(s) {
+                return true
+            }
+            return false
+        }()
+
+        if shortcutModifiers == [.shift] && !isShiftLetter {
             if handleShiftedPassthrough(event, client: client) {
                 return true
             }
@@ -1108,20 +1119,21 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
 
         guard let chars = event.charactersIgnoringModifiers?.lowercased(), !chars.isEmpty else { return false }
         processedCharacterCount = chars.count
+        let tokenToFeed = isShiftLetter ? (event.characters ?? chars.uppercased()) : chars
         if let mapped = Self.mapKeySequence(chars) {
             pushCompositionUndoSnapshot()
             basicCandidateWindowRequested = false
             if focusedTraceRawTokens.contains(chars) {
                 appendFocusedTrace("mapped chars=\(chars) mapped=\(mapped) before readings=\(readings.joined(separator: "/")) current=\(currentReading) composing=\(composingBuffer)")
             }
-            rawInputTokens.append(chars)
+            rawInputTokens.append(tokenToFeed)
             cachedRawInputBuffer = nil
             if mergedCompositionActive {
                 rebuildTargetsFromRawInputBuffer(mergeImmediately: false)
                 mergedCompositionActive = false
                 detectedEnglishCandidates = []
             } else {
-                feedUnified(token: chars)
+                feedUnified(token: tokenToFeed)
                 cacheRawReplayState(targetState, for: rawInputTokens)
             }
             scheduleMergeCheck()
@@ -1315,11 +1327,13 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
                       || $0 == "'"
                       || $0 == "-"
               }),
-              EnglishIMEEngine.isExactWord(raw),
               let input = resolvedIMKClient(client, operation: "commitEnglishBoundaryIfNeeded")
         else {
             return false
         }
+
+        let isWord = EnglishIMEEngine.isExactWord(raw)
+        guard isWord || readings.isEmpty else { return false }
 
         let englishText = EnglishIMEEngine.exactSurfaceCandidates(for: raw).first ?? raw
         let textToInsert = includeSeparator ? (englishText + " ") : englishText

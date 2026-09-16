@@ -254,6 +254,7 @@ struct LexiconStore {
 
     func hasCandidates(for reading: String) -> Bool {
         if !(commonCharacterMap[reading] ?? []).isEmpty { return true }
+        if !UserCustomPhraseStore.phrases(for: reading).isEmpty { return true }
         if !(phraseCandidateMap[reading] ?? []).isEmpty { return true }
         if !(overrideCharacterMap[reading] ?? []).isEmpty { return true }
         return false
@@ -467,14 +468,17 @@ struct LexiconStore {
                 if let limit, merged.count - startCount >= limit { return }
             }
         }
+        let customPhrases = UserCustomPhraseStore.phrases(for: reading)
         let candidateSources: [[String]]
         if preferPhrasesFirst {
             candidateSources = [
+                customPhrases,
                 phraseCandidateMap[reading] ?? [],
                 commonCharacterMap[reading] ?? []
             ]
         } else {
             candidateSources = [
+                customPhrases,
                 commonCharacterMap[reading] ?? [],
                 phraseCandidateMap[reading] ?? []
             ]

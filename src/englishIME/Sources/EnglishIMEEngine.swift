@@ -73,8 +73,15 @@ private enum EnglishLexiconStore {
     }
 
     static func exactCandidates(for normalized: String) -> [EnglishLexiconEntry] {
+        var results: [EnglishLexiconEntry] = []
+        if let custom = UserCustomEnglishStore.customWord(for: normalized) {
+            results.append(EnglishLexiconEntry(normalized: normalized, surface: custom, weight: 999999, translation: "自訂詞彙"))
+        }
         ensureLoaded()
-        return cachedExactMap?[normalized] ?? []
+        if let builtin = cachedExactMap?[normalized] {
+            results.append(contentsOf: builtin.filter { $0.surface != results.first?.surface })
+        }
+        return results
     }
 
     static func prefixCandidates(for normalized: String, limit: Int = 20) -> [EnglishLexiconEntry] {
@@ -223,7 +230,18 @@ struct EnglishIMEEngine: CompositionLanguageBehavior {
     static func exactSurfaceCandidates(for token: String) -> [String] {
         let normalized = normalizeEnglishToken(token)
         guard !normalized.isEmpty else { return [] }
-        return EnglishLexiconStore.exactCandidates(for: normalized).map(\.surface)
+        let candidates = EnglishLexiconStore.exactCandidates(for: normalized).map(\.surface)
+        if let first = token.first, first.isUppercase {
+            let isAllUpper = token.allSatisfy { !$0.isLetter || $0.isUppercase }
+            return candidates.map { entry in
+                if isAllUpper {
+                    return entry.uppercased()
+                } else {
+                    return entry.prefix(1).uppercased() + entry.dropFirst()
+                }
+            }
+        }
+        return candidates
     }
 
     static func canExtendToken(_ token: String) -> Bool {
@@ -235,6 +253,9 @@ struct EnglishIMEEngine: CompositionLanguageBehavior {
     static func isExactWord(_ token: String) -> Bool {
         let normalized = normalizeEnglishToken(token)
         guard !normalized.isEmpty else { return false }
+        if UserCustomEnglishStore.customWord(for: normalized) != nil {
+            return true
+        }
         if EnglishLexiconStore.exactSurfaceMatches(for: normalized, surface: token) {
             return true
         }

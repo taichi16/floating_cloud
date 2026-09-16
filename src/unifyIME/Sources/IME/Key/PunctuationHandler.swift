@@ -78,11 +78,12 @@ final class PunctuationHandler {
         let committed: String?
         if let mapped = qwertyLetterByKeyCode[event.keyCode],
            mapped.unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) }) {
-            committed = mapped.uppercased()
+            // 英文字母應納入組字緩衝區以支援首字大寫中英混輸，不在此直通輸出
+            return .notHandled
         } else if let rawChars = event.charactersIgnoringModifiers?.lowercased(),
                   rawChars.count == 1,
                   rawChars.unicodeScalars.allSatisfy({ $0.isASCII && CharacterSet.letters.contains($0) && !CharacterSet.controlCharacters.contains($0) }) {
-            committed = rawChars.uppercased()
+            return .notHandled
         } else {
             committed = nil
         }
