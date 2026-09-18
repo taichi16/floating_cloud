@@ -83,7 +83,7 @@ enum IMKReplacementRangePolicy {
     }
 
     static func forCommit(_ markedRange: NSRange) -> NSRange {
-        currentInsertionPoint
+        isUsableDocumentRange(markedRange) ? markedRange : currentInsertionPoint
     }
 
     private static func isUsableDocumentRange(_ range: NSRange) -> Bool {

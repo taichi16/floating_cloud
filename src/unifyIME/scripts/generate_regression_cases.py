@@ -17,7 +17,7 @@ def resolve_root() -> Path:
 
 
 ROOT = resolve_root()
-APP = ROOT / "bin" / "app" / "全一輸入法.app" / "Contents" / "MacOS" / "UnifyIME"
+APP = ROOT / "bin" / "app" / "行雲_繁-A.app" / "Contents" / "MacOS" / "UnifyIME"
 OUTPUT = ROOT / "src" / "unifyIME" / "tests" / "regression_cases.jsonl"
 TARGET_COUNTS = {"zh": 100, "en": 100, "mix": 200}
 PROBE_BATCH_COMMANDS = {

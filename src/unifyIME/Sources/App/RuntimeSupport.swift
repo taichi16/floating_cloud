@@ -63,7 +63,7 @@ var gCurrentCandidateController: CandidateController?
 let imeStateNotification = Notification.Name("com.vader.unifyime.state")
 let workspaceRootURL = resolvedWorkspaceRootURL()
 let fastChIMEDataDir = FileManager.default.homeDirectoryForCurrentUser
-    .appendingPathComponent("Library/Application Support/UnifyIME", isDirectory: true)
+    .appendingPathComponent("Library/Application Support/行雲_繁-A", isDirectory: true)
 let runtimeTempDir = fastChIMEDataDir.appendingPathComponent("temp", isDirectory: true)
 private let nativeIMKSmokeRequestFileName = "native-imk-smoke-request.json"
 private let nativeIMKSmokeRequestMaxLifetime: TimeInterval = 90
@@ -610,11 +610,23 @@ func publishIMEState(_ text: String, anchor: CGPoint? = nil, showCandidates: Boo
 }
 
 func screenVisibleFrame(containing point: CGPoint?) -> NSRect? {
-    if let point,
-       let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) }) {
-        return screen.visibleFrame
+    if let point {
+        if let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) }) {
+            return screen.visibleFrame
+        }
+        // 若 point 稍微超出螢幕邊界，挑選距離該點最近的螢幕可見區域
+        let closest = NSScreen.screens.min { s1, s2 in
+            let d1 = hypot(max(0, s1.frame.minX - point.x, point.x - s1.frame.maxX),
+                           max(0, s1.frame.minY - point.y, point.y - s1.frame.maxY))
+            let d2 = hypot(max(0, s2.frame.minX - point.x, point.x - s2.frame.maxX),
+                           max(0, s2.frame.minY - point.y, point.y - s2.frame.maxY))
+            return d1 < d2
+        }
+        if let closest {
+            return closest.visibleFrame
+        }
     }
-    return NSScreen.main?.visibleFrame
+    return NSScreen.main?.visibleFrame ?? NSScreen.screens.first?.visibleFrame
 }
 
 func publishIMEProbe(route: String, input: String, composing: String, candidateEntries: [CandidateEntry], selectedIndex: Int, focusInfo: String? = nil, anchor: CGPoint? = nil) {

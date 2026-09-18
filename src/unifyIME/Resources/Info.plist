@@ -5,27 +5,25 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>行雲</string>
+	<string>行雲_繁-A</string>
 	<key>CFBundleExecutable</key>
 	<string>UnifyIME</string>
 	<key>CFBundleIconFile</key>
-	<string>Bopomofo</string>
-	<key>CFBundleIconName</key>
 	<string>Bopomofo</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.vader.inputmethod.XingYunIME</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>XingYun</string>
+	<string>行雲_繁-A</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.0</string>
+	<string>1.26.0918</string>
 	<key>CFBundleSignature</key>
 	<string>FCIN</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>202609181300</string>
 	<key>ComponentInputModeDict</key>
 	<dict>
 		<key>tsInputModeListKey</key>
@@ -37,7 +35,7 @@
 				<key>TISIconLabels</key>
 				<dict>
 					<key>Primary</key>
-					<string>行雲</string>
+					<string>行雲_繁-A</string>
 				</dict>
 				<key>TISInputSourceID</key>
 				<string>com.vader.inputmethod.XingYunIME.Bopomofo</string>
@@ -48,6 +46,8 @@
 				<key>tsInputModeCharacterRepertoireKey</key>
 				<array>
 					<string>Hant</string>
+					<string>Hani</string>
+					<string>Hanb</string>
 					<string>Han</string>
 				</array>
 				<key>tsInputModeDefaultStateKey</key>
@@ -89,20 +89,35 @@
 	<true/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+	<key>NSRequiresAquaSystemAppearance</key>
+	<string>No</string>
 	<key>TICapsLockLanguageSwitchCapable</key>
 	<true/>
 	<key>TISInputSourceID</key>
 	<string>com.vader.inputmethod.XingYunIME</string>
 	<key>TISIntendedLanguage</key>
 	<string>zh-Hant</string>
+	<key>TISIconLabels</key>
+	<dict>
+		<key>Primary</key>
+		<string>行雲_繁-A</string>
+	</dict>
 	<key>TISParticipatesInTouchBar</key>
 	<false/>
 	<key>tsInputMethodCharacterRepertoireKey</key>
 	<array>
 		<string>Hant</string>
 		<string>Hans</string>
+		<string>Hani</string>
+		<string>Hanb</string>
 		<string>Han</string>
 	</array>
+	<key>TISIconIsTemplate</key>
+	<true/>
 	<key>tsInputMethodIconFileKey</key>
 	<string>Bopomofo.tiff</string>
 </dict>

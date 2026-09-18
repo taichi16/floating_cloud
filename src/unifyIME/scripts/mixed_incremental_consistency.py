@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[3]
 APP = Path(
     os.environ.get(
         "UNIFYIME_CLI_PATH",
-        str(ROOT / "bin" / "app" / "全一輸入法.app" / "Contents" / "MacOS" / "UnifyIME"),
+        str(ROOT / "bin" / "app" / "行雲_繁-A.app" / "Contents" / "MacOS" / "UnifyIME"),
     )
 )
 TIMEOUT_SECONDS = 120

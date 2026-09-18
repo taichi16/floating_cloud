@@ -127,18 +127,15 @@ struct InputSourceHelper {
         CFPreferencesSetAppValue(historyKey, history as CFPropertyList, hitoolboxPreferencesID)
         guard CFPreferencesAppSynchronize(hitoolboxPreferencesID) else { return false }
 
-        // 同步寫入 com.apple.inputsources (只寫入 Mode)
+        // 同步寫入 com.apple.inputsources (標準格式僅登錄 Keyboard Input Method 根 Bundle ID)
         let inputsourcesID = "com.apple.inputsources" as CFString
         let thirdPartyKey = "AppleEnabledThirdPartyInputSources" as CFString
         var thirdParty = (CFPreferencesCopyAppValue(thirdPartyKey, inputsourcesID) as? [[String: Any]]) ?? []
-        for modeID in modeIDs {
-            upsert(
-                sourceEntry(bundleID: parentID, modeID: modeID, kind: "Input Mode"),
-                into: &thirdParty,
-                matching: parentID,
-                modeID: modeID
-            )
-        }
+        thirdParty = thirdParty.filter { ($0["Bundle ID"] as? String) != parentID }
+        thirdParty.append([
+            "Bundle ID": parentID,
+            "InputSourceKind": "Keyboard Input Method"
+        ])
         CFPreferencesSetAppValue(thirdPartyKey, thirdParty as CFPropertyList, inputsourcesID)
         CFPreferencesAppSynchronize(inputsourcesID)
 
@@ -184,4 +181,46 @@ struct InputSourceHelper {
         }
         return true
     }
+
+    static func selfHealDeduplicateInputSources() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        guard let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource] else { return }
+
+        var modeSources: [String: [TISInputSource]] = [:]
+        var parentSources: [TISInputSource] = []
+
+        for src in list {
+            let bIDPtr = TISGetInputSourceProperty(src, kTISPropertyBundleID)
+            let bID = bIDPtr != nil ? (Unmanaged<CFString>.fromOpaque(bIDPtr!).takeUnretainedValue() as String) : ""
+            guard bID == bundleID else { continue }
+
+            let typePtr = TISGetInputSourceProperty(src, kTISPropertyInputSourceType)
+            let type = typePtr != nil ? (Unmanaged<CFString>.fromOpaque(typePtr!).takeUnretainedValue() as String) : ""
+
+            if type == (kTISTypeKeyboardInputMode as String) {
+                let idPtr = TISGetInputSourceProperty(src, kTISPropertyInputSourceID)
+                let mID = idPtr != nil ? (Unmanaged<CFString>.fromOpaque(idPtr!).takeUnretainedValue() as String) : ""
+                modeSources[mID, default: []].append(src)
+            } else {
+                parentSources.append(src)
+            }
+        }
+
+        for (_, sources) in modeSources {
+            if sources.count > 1 {
+                for redundant in sources.dropLast() {
+                    print("Self-healing: disabling redundant input mode source")
+                    TISDisableInputSource(redundant)
+                }
+            }
+        }
+
+        if parentSources.count > 1 {
+            for redundant in parentSources.dropLast() {
+                print("Self-healing: disabling redundant parent source")
+                TISDisableInputSource(redundant)
+            }
+        }
+    }
+
 }

@@ -49,13 +49,17 @@ enum IMELifecycleFrequencyFlush {
                 + "failure=\(failureSignature) duplicateSuppressed=\(!shouldReport)"
         )
         if shouldReport {
-            NSLog("全一輸入法詞頻寫入失敗（%@）：%@", source, failureSignature)
+            NSLog("行雲_繁-A詞頻寫入失敗（%@）：%@", source, failureSignature)
         }
     }
 }
 
 /// 正式 IME 程序的最小終止接點；偏好預覽與候選輔助程序各自使用自己的 delegate。
 private final class IMEApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_: Notification) {
+        InputSourceHelper.selfHealDeduplicateInputSources()
+    }
+
     func applicationWillTerminate(_: Notification) {
         IMELifecycleFrequencyFlush.flush(source: "applicationWillTerminate")
     }
@@ -1511,7 +1515,7 @@ func runUnifyIMEAppEntry() {
 
     if CommandLine.arguments.count == 1,
        !(bundlePath as NSString).hasPrefix(installedInputMethodsPath as String) {
-        print("全一輸入法 app test/debug UI 已移除，請改用 CLI selftest。")
+        print("行雲_繁-A app test/debug UI 已移除，請改用 CLI selftest。")
         exit(0)
     }
 

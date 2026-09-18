@@ -99,7 +99,7 @@ final class TrainingProgressWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "全一輸入法 Training"
+        window.title = "行雲_繁-A Training"
         window.isReleasedWhenClosed = false
         window.level = .floating
 

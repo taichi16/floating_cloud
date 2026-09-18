@@ -78,7 +78,7 @@ enum MixedCompositionResolver {
         let hasExactPendingChinese = !(lexicon.commonCharacterMap[pendingReading] ?? []).isEmpty
         let isPureASCIIWord = rawBuffer.count <= 3 && rawBuffer.unicodeScalars.allSatisfy {
             $0.isASCII && CharacterSet.letters.contains($0)
-        }
+        } && EnglishIMEEngine.isExactWord(rawBuffer)
         let ambiguousShortEnglish = rawBuffer.count <= 3 && !isPureASCIIWord &&
             (hasExactPendingChinese || primarySegments.contains { LexiconStore.isDisplayableCandidate($0.value) })
         // 三鍵以內的序列若已形成有效中文讀音（例如 su3 → ㄋㄧˇ），

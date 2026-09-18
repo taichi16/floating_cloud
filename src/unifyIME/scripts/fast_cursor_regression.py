@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 
 
 ROOT = Path(__file__).resolve().parents[2]
-APP_SUPPORT = Path.home() / "Library/Application Support/UnifyIME"
+APP_SUPPORT = Path.home() / "Library/Application Support/行雲_繁-A"
 REVERSE_CACHE = APP_SUPPORT / "reverse_lexicon_cache.json"
 COMMON_MAP = ROOT / "fastChIME" / "Resources" / "common_map.tsv"
 PHRASE_MAP = ROOT / "fastChIME" / "Resources" / "phrase_map.tsv"

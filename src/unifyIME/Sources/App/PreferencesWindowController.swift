@@ -33,7 +33,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, W
             contentRect: NSRect(x: 0, y: 0, width: 740, height: 540),
             styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false
         )
-        window.title = readOnly ? "全一輸入法偏好設定 · 唯讀預覽" : "全一輸入法偏好設定"
+        window.title = readOnly ? "行雲_繁-A 偏好設定 · 唯讀預覽" : "行雲_繁-A 偏好設定"
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 740, height: 540)
         window.maxSize = NSSize(width: 740, height: 540)
@@ -151,7 +151,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate, W
         case "pause":
             guard let raw = value as? String, let mode = PauseRecognitionMode(rawValue: raw) else { return false }
             currentPauseRecognitionMode = mode
-            showUserNotice(title: "全一輸入法", message: "停頓辨識已切換為\(mode.title)")
+            showUserNotice(title: "行雲_繁-A", message: "停頓辨識已切換為\(mode.title)")
         case "chinese", "english":
             let languages: [String: (String, CompositionLanguageSetting)] = [
                 "chinese": (chineseLanguageDefaultsKey, .bopomofo),

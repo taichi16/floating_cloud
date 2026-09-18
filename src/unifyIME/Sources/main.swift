@@ -931,8 +931,19 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
         return mask
     }
 
+    override func setValue(_ value: Any!, forTag tag: Int, client: Any!) {
+        appendRuntimeTrace("imk.setValue session=\(imkSessionTraceID) tag=\(tag) value=\(String(describing: value))")
+        super.setValue(value, forTag: tag, client: client)
+        if let textInput = client as? IMKTextInput {
+            textInput.overrideKeyboard(withKeyboardNamed: "com.apple.keylayout.ABC")
+        }
+    }
+
     override func activateServer(_ client: Any!) {
         beginIMKSession(callbackClient: client)
+        if let textInput = client as? IMKTextInput {
+            textInput.overrideKeyboard(withKeyboardNamed: "com.apple.keylayout.ABC")
+        }
         traceIMKBoundary("activate.before", callbackClient: client)
         traceState("activateServer.before")
         appendRuntimeTrace("activateServer session=\(imkSessionTraceID) client=\(runtimeClientDescriptor(client))")
@@ -1000,6 +1011,7 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
 
     override func handle(_ event: NSEvent!, client: Any!) -> Bool {
         guard let event else { return false }
+        guard event.type == .keyDown else { return false }
         let startedAt = isRuntimeProfilingEnabled ? DispatchTime.now().uptimeNanoseconds : 0
         var processedCharacterCount = 0
         defer {
@@ -1016,12 +1028,14 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
             appendFocusedTrace("delete.handle keyCode=\(event.keyCode) chars=\(event.characters ?? "∅") raw=\(event.charactersIgnoringModifiers ?? "∅") hasComposition=\(hasComposition)")
         }
         traceState("handle.pre keyCode=\(event.keyCode)")
-        guard event.type == .keyDown else { return false }
 
         let modifiers = event.modifierFlags.intersection([.shift, .control, .option, .command, .capsLock, .numericPad, .function, .help])
         // 不將修飾鍵刪除組合攔截為單字刪除。function 亦可能是獨立
         // Delete 鍵本身的事件旗標，因此按系統提供的標準鍵碼判斷。
         if deletionKey != nil && !modifiers.intersection([.shift, .control, .option, .command]).isEmpty {
+            return false
+        }
+        if deletionKey != nil && !hasComposition {
             return false
         }
         let hasComposition = hasComposition
@@ -1332,8 +1346,7 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
             return false
         }
 
-        let isWord = EnglishIMEEngine.isExactWord(raw)
-        guard isWord || readings.isEmpty else { return false }
+        guard EnglishIMEEngine.isExactWord(raw) else { return false }
 
         let englishText = EnglishIMEEngine.exactSurfaceCandidates(for: raw).first ?? raw
         let textToInsert = includeSeparator ? (englishText + " ") : englishText

@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_TARGET = Path.home() / "Library/Application Support/UnifyIME/Models/CandidateRanker.mlmodelc"
+DEFAULT_TARGET = Path.home() / "Library/Application Support/行雲_繁-A/Models/CandidateRanker.mlmodelc"
 DEFAULT_COMPILE_DIR = ROOT / "artifacts" / "compiled_model_tmp"
 
 

@@ -55,7 +55,7 @@ private struct Options {
         let home = FileManager.default.homeDirectoryForCurrentUser
         reportURL = values["--report-json"].map { URL(fileURLWithPath: $0) }
         traceURL = URL(fileURLWithPath: values["--trace-path"] ?? environment["UNIFYIME_RUNTIME_TRACE"] ?? "/tmp/unifyime-native-imk-host.log")
-        appBundleURL = URL(fileURLWithPath: values["--app-bundle"] ?? home.appendingPathComponent("Library/Input Methods/全一輸入法.app").path, isDirectory: true)
+        appBundleURL = URL(fileURLWithPath: values["--app-bundle"] ?? home.appendingPathComponent("Library/Input Methods/行雲_繁-A.app").path, isDirectory: true)
         modeID = values["--mode-id"] ?? defaultModeID
         sourceID = values["--source-id"] ?? defaultSourceID
         workspaceRootURL = URL(fileURLWithPath: values["--workspace-root"] ?? environment["UNIFYIME_WORKSPACE_ROOT"] ?? FileManager.default.currentDirectoryPath, isDirectory: true)
@@ -1402,7 +1402,7 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         )
 
         let deployedBundle = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Input Methods/全一輸入法.app", isDirectory: true)
+            .appendingPathComponent("Library/Input Methods/行雲_繁-A.app", isDirectory: true)
             .standardizedFileURL
         let bundlePathMatchesDeployment = options.appBundleURL.standardizedFileURL.path == deployedBundle.path
         let deploymentDetails: [String: Any] = [

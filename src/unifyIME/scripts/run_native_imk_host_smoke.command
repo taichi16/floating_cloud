@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_ROOT="$(cd "$ROOT/../.." && pwd)"
 REPORT_PATH="${1:?請提供 native host smoke JSON 報告路徑}"
 TRACE_PATH="${2:?請提供 native host smoke trace 路徑}"
-APP_BUNDLE="${3:-$HOME/Library/Input Methods/全一輸入法.app}"
+APP_BUNDLE="${3:-$HOME/Library/Input Methods/行雲_繁-A.app}"
 DRY_RUN=0
 for arg in "$@"; do
   case "$arg" in

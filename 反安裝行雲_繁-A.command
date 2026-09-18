@@ -28,10 +28,11 @@ echo "🧹 正在移除 行雲_繁-A..."
 # 1. 終止進程
 killall UnifyIME 2>/dev/null || true
 
-# 2. 精準自偏好設定移除，防止殘留幽靈項目（100% 不影響其他輸入法）
+# 2. 精準自偏好設定與 TIS 核心中停用移除，徹底防範幽靈句柄
 swift -e '
 import Foundation
 import CoreFoundation
+import Carbon
 
 let domain = "com.apple.HIToolbox" as CFString
 let keys = ["AppleEnabledInputSources", "AppleSelectedInputSources", "AppleInputSourceHistory"]
@@ -61,6 +62,16 @@ if let list = CFPreferencesCopyAppValue(thirdPartyKey, inputDomain) as? [[String
     }
     CFPreferencesSetAppValue(thirdPartyKey, filtered as CFArray, inputDomain)
     CFPreferencesSynchronize(inputDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+}
+
+if let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource] {
+    for s in list {
+        let idPtr = TISGetInputSourceProperty(s, kTISPropertyInputSourceID)
+        let id = idPtr != nil ? (Unmanaged<CFString>.fromOpaque(idPtr!).takeUnretainedValue() as String) : ""
+        if id.contains("XingYunIME") {
+            TISDisableInputSource(s)
+        }
+    }
 }
 '
 

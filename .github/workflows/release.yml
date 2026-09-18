@@ -25,7 +25,7 @@ jobs:
 
       - name: Grant executable permissions
         run: |
-          chmod +x build.command 打包DMG.command 安装行雲_繁-A.command 反安裝行雲_繁-A.command src/unifyIME/build.sh || true
+          chmod +x build.command 打包DMG.command 安裝行雲_繁-A.command 反安裝行雲_繁-A.command src/unifyIME/build.sh || true
 
       - name: Build and Package DMG
         run: |

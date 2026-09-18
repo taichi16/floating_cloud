@@ -3,7 +3,7 @@ import AppKit
 final class TransientNoticeWindowController: NSWindowController {
     static let shared = TransientNoticeWindowController()
 
-    private let titleLabel = NSTextField(labelWithString: "全一輸入法")
+    private let titleLabel = NSTextField(labelWithString: "行雲_繁-A")
     private let bodyLabel = NSTextField(labelWithString: "")
     private let closeButton = NSButton(title: "知道了", target: nil, action: nil)
     private var hideWorkItem: DispatchWorkItem?
@@ -16,7 +16,7 @@ final class TransientNoticeWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "全一輸入法"
+        window.title = "行雲_繁-A"
         window.level = .floating
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
@@ -56,7 +56,7 @@ final class TransientNoticeWindowController: NSWindowController {
         window?.orderOut(nil)
     }
 
-    func show(title: String = "全一輸入法", message: String, duration: TimeInterval? = nil) {
+    func show(title: String = "行雲_繁-A", message: String, duration: TimeInterval? = nil) {
         guard let window else { return }
         hideWorkItem?.cancel()
         titleLabel.stringValue = title

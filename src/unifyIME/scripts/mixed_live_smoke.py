@@ -16,7 +16,7 @@ def resolve_workspace_root() -> Path:
 
 
 ROOT = resolve_workspace_root()
-APP = Path(os.environ.get("UNIFYIME_CLI_PATH", str(ROOT / "bin" / "app" / "全一輸入法.app" / "Contents" / "MacOS" / "UnifyIME")))
+APP = Path(os.environ.get("UNIFYIME_CLI_PATH", str(ROOT / "bin" / "app" / "行雲_繁-A.app" / "Contents" / "MacOS" / "UnifyIME")))
 CASES = [
     ("pure-zh-ni", "su3", "你", True),
     ("pure-zh", "wu0fu4", "天氣", True),

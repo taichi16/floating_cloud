@@ -38,12 +38,17 @@ mkdir -p "$HOME/Library/Input Methods"
 
 # 2. 部署應用程式
 ditto "$SRC_APP" "$TARGET"
-codesign --force --sign - --timestamp=none "$TARGET" 2>/dev/null || true
+ENTITLEMENTS="$DIR/src/unifyIME/Resources/fastChIME.entitlements"
+if [[ -f "$ENTITLEMENTS" ]]; then
+    codesign --force --sign - --timestamp=none --entitlements "$ENTITLEMENTS" "$TARGET" 2>/dev/null || true
+else
+    codesign --force --sign - --timestamp=none "$TARGET" 2>/dev/null || true
+fi
 
 # 3. 向 macOS LaunchServices 核心註冊
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET"
 
-# 4. 精準寫入 AppleEnabledInputSources 並透過 TIS 啟用
+# 4. 精準寫入 AppleEnabledInputSources 並透過 TIS 啟用（排他性單一啟用，自動剔除舊句柄）
 swift -e '
 import Foundation
 import CoreFoundation
@@ -58,35 +63,55 @@ if let currentVal = CFPreferencesCopyAppValue(key, domain) as? [[String: Any]] {
         "Input Mode": "com.vader.inputmethod.XingYunIME.Bopomofo",
         "InputSourceKind": "Input Mode"
     ]
-    var exists = false
-    for item in currentVal {
-        if let b = item["Bundle ID"] as? String, b == "com.vader.inputmethod.XingYunIME" {
-            exists = true
-            break
-        }
+    var filtered = currentVal.filter { item in
+        guard let b = item["Bundle ID"] as? String else { return true }
+        return !b.contains("XingYunIME")
     }
-    if !exists {
-        var newVal = currentVal
-        newVal.append(targetItem)
-        CFPreferencesSetAppValue(key, newVal as CFArray, domain)
-        CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+    filtered.append(targetItem)
+    CFPreferencesSetAppValue(key, filtered as CFArray, domain)
+    CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+}
+
+let inputDomain = "com.apple.inputsources" as CFString
+let thirdPartyKey = "AppleEnabledThirdPartyInputSources" as CFString
+if let currentVal = CFPreferencesCopyAppValue(thirdPartyKey, inputDomain) as? [[String: Any]] {
+    let targetItem: [String: Any] = [
+        "Bundle ID": "com.vader.inputmethod.XingYunIME",
+        "InputSourceKind": "Keyboard Input Method"
+    ]
+    var filtered = currentVal.filter { item in
+        guard let b = item["Bundle ID"] as? String else { return true }
+        return !b.contains("XingYunIME")
     }
+    filtered.append(targetItem)
+    CFPreferencesSetAppValue(thirdPartyKey, filtered as CFArray, inputDomain)
+    CFPreferencesSynchronize(inputDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
 }
 
 if let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource] {
+    var bopomofoSources: [TISInputSource] = []
     for s in list {
         let idPtr = TISGetInputSourceProperty(s, kTISPropertyInputSourceID)
         let id = idPtr != nil ? (Unmanaged<CFString>.fromOpaque(idPtr!).takeUnretainedValue() as String) : ""
-        if id == "com.vader.inputmethod.XingYunIME.Bopomofo" || id == "com.vader.inputmethod.XingYunIME" {
-            TISEnableInputSource(s)
+        if id == "com.vader.inputmethod.XingYunIME.Bopomofo" {
+            bopomofoSources.append(s)
+        } else if id == "com.vader.inputmethod.XingYunIME" {
+            TISDisableInputSource(s)
         }
+    }
+    if let latest = bopomofoSources.last {
+        for old in bopomofoSources.dropLast() {
+            TISDisableInputSource(old)
+        }
+        TISEnableInputSource(latest)
+        TISSelectInputSource(latest)
     }
 }
 '
 
 # 5. 啟動 App 並重整選單列
 open "$TARGET" 2>/dev/null || true
-killall TextInputMenuAgent TextInputSwitcher 2>/dev/null || true
+killall -9 imklaunchagent TextInputMenuAgent TextInputSwitcher 2>/dev/null || true
 
 echo "=========================================="
 echo "        🎉 行雲_繁-A 安裝完成！"

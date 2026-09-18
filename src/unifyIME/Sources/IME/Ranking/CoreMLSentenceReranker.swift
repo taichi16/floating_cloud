@@ -63,6 +63,8 @@ struct CoreMLSentenceReranker: UnifiedSentenceReranker {
 
         let candidatePaths = [
             FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support/行雲_繁-A/Models/\(modelName).mlmodelc"),
+            FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Application Support/UnifyIME/Models/\(modelName).mlmodelc"),
             FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(".fastchime/Models/\(modelName).mlmodelc"),

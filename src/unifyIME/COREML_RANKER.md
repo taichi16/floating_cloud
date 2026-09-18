@@ -34,12 +34,12 @@
 
 載入順序：
 1. `UNIFYIME_RANKER_MODEL_PATH`
-2. `~/Library/Application Support/UnifyIME/Models/CandidateRanker.mlmodelc`
+2. `~/Library/Application Support/行雲_繁-A/Models/CandidateRanker.mlmodelc`
 3. `~/.fastchime/Models/CandidateRanker.mlmodelc`
 4. app bundle 的 `Contents/Resources/Models/CandidateRanker.mlmodelc`
 
 建議預設安裝位置：
-- `~/Library/Application Support/UnifyIME/Models/CandidateRanker.mlmodelc`
+- `~/Library/Application Support/行雲_繁-A/Models/CandidateRanker.mlmodelc`
 
 ## 目前狀態
 

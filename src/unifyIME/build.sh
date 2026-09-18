@@ -88,10 +88,10 @@ remove_stale_input_methods() {
     display_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app/Contents/Info.plist" 2>/dev/null || true)"
 
     # 嚴格保護「全一輸入法」與「全一_繁-A」，只清理「行雲_繁-A」自身的歷史遺留
-    if [[ "$app_id" == "$current_id" ]] \
+    if [[ -n "$current_id" && -n "$app_id" && "$app_id" == "$current_id" ]] \
       || [[ "$app_name" == *"行雲_繁-A"* ]] \
       || [[ "$display_name" == *"行雲_繁-A"* ]]; then
-      echo "Moving stale input method to Trash:"
+      echo "Removing stale input method:"
       echo "  $app"
       rm -rf "$app"
     fi
@@ -186,14 +186,10 @@ if [[ "$SKIP_SIGN" != "1" ]]; then
   codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" --entitlements "$ROOT/Resources/fastChIME.entitlements" "$APP_DIR"
   codesign --verify --deep --strict "$APP_DIR"
 else
-  # swiftc 的執行檔簽章不涵蓋後續加入的 App 資源；部署前須封裝簽章。
-  if [[ "$DEPLOY_MODE" == "1" && "${UNIFYIME_SKIP_DEPLOY:-${FASTCHIME_SKIP_DEPLOY:-0}}" != "1" ]]; then
-    codesign --force --sign - --timestamp=none "$APP_DIR"
-    codesign --verify --deep --strict "$APP_DIR"
-    echo "Applied local ad-hoc bundle signature (not notarized)"
-  else
-    echo "Skipping codesign"
-  fi
+  # 本地開發／封裝永遠強制簽署 ad-hoc 並帶入 entitlements，防止 Mach port 通訊被 macOS 阻斷
+  codesign --force --sign - --timestamp=none --entitlements "$ROOT/Resources/fastChIME.entitlements" "$APP_DIR"
+  codesign --verify --deep --strict "$APP_DIR"
+  echo "Applied local ad-hoc bundle signature (with entitlements)"
 fi
 
 if [[ "$DEPLOY_MODE" == "1" && "${UNIFYIME_SKIP_DEPLOY:-${FASTCHIME_SKIP_DEPLOY:-0}}" != "1" ]]; then
@@ -212,17 +208,74 @@ if [[ "$DEPLOY_MODE" == "1" && "${UNIFYIME_SKIP_DEPLOY:-${FASTCHIME_SKIP_DEPLOY:
   remove_stale_input_methods
   rm -rf "$INSTALL_DIR"
   ditto "$APP_DIR" "$INSTALL_DIR"
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$APP_DIR" 2>/dev/null || true
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$INSTALL_DIR"
-  killall UnifyIME >/dev/null 2>&1 || true
-  killall "快捷中文測試" >/dev/null 2>&1 || true
-  killall TextInputMenuAgent >/dev/null 2>&1 || true
+  killall -9 imklaunchagent TextInputMenuAgent TextInputSwitcher UnifyIME >/dev/null 2>&1 || true
   killall cfprefsd >/dev/null 2>&1 || true
   pkill -f "$INSTALL_DIR/Contents/MacOS/UnifyIME" >/dev/null 2>&1 || true
-  # 先完成 TIS 父來源／子模式的啟用與選取，再讓 macOS 在實際切換時
-  # demand-launch IMK server。不可在這裡預先啟動 server，否則它可能在
-  # 舊輸入來源仍為目前來源時建立 session，之後現有 AppKit context 不會切換。
-  # Legacy install call removed; use standard lsregister only
-  echo "Deployed and reloaded:"
+
+  # 註冊至 TIS 與偏好設定，並啟動輸入法常駐進程
+  swift -e '
+  import Foundation
+  import CoreFoundation
+  import Carbon
+
+  let hitDomain = "com.apple.HIToolbox" as CFString
+  let hitKey = "AppleEnabledInputSources" as CFString
+  if let currentVal = CFPreferencesCopyAppValue(hitKey, hitDomain) as? [[String: Any]] {
+      let targetItem: [String: Any] = [
+          "Bundle ID": "com.vader.inputmethod.XingYunIME",
+          "Input Mode": "com.vader.inputmethod.XingYunIME.Bopomofo",
+          "InputSourceKind": "Input Mode"
+      ]
+      var filtered = currentVal.filter { item in
+          guard let b = item["Bundle ID"] as? String else { return true }
+          return !b.contains("XingYunIME")
+      }
+      filtered.append(targetItem)
+      CFPreferencesSetAppValue(hitKey, filtered as CFArray, hitDomain)
+      CFPreferencesSynchronize(hitDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+  }
+
+  let inputDomain = "com.apple.inputsources" as CFString
+  let thirdPartyKey = "AppleEnabledThirdPartyInputSources" as CFString
+  if let currentVal = CFPreferencesCopyAppValue(thirdPartyKey, inputDomain) as? [[String: Any]] {
+      let targetItem: [String: Any] = [
+          "Bundle ID": "com.vader.inputmethod.XingYunIME",
+          "InputSourceKind": "Keyboard Input Method"
+      ]
+      var filtered = currentVal.filter { item in
+          guard let b = item["Bundle ID"] as? String else { return true }
+          return !b.contains("XingYunIME")
+      }
+      filtered.append(targetItem)
+      CFPreferencesSetAppValue(thirdPartyKey, filtered as CFArray, inputDomain)
+      CFPreferencesSynchronize(inputDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+  }
+
+  if let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource] {
+      var bopomofoSources: [TISInputSource] = []
+      for s in list {
+          let idPtr = TISGetInputSourceProperty(s, kTISPropertyInputSourceID)
+          let id = idPtr != nil ? (Unmanaged<CFString>.fromOpaque(idPtr!).takeUnretainedValue() as String) : ""
+          if id == "com.vader.inputmethod.XingYunIME.Bopomofo" {
+              bopomofoSources.append(s)
+          } else if id == "com.vader.inputmethod.XingYunIME" {
+              TISDisableInputSource(s)
+          }
+      }
+      if let latest = bopomofoSources.last {
+          for old in bopomofoSources.dropLast() {
+              TISDisableInputSource(old)
+          }
+          TISEnableInputSource(latest)
+          TISSelectInputSource(latest)
+      }
+  }
+  '
+
+  open "$INSTALL_DIR" 2>/dev/null || true
+  echo "Deployed and launched:"
   echo "  $INSTALL_DIR"
 fi
 

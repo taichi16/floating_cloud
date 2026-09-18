@@ -82,9 +82,7 @@ struct CoreMLListwiseCandidateRanker {
         if #available(macOS 14.4, *) {
             configuration.optimizationHints.reshapeFrequency = .infrequent
         }
-        if #available(macOS 15.0, *) {
-            (configuration.optimizationHints as AnyObject).setValue?(0, forKey: "specializationStrategy")
-        }
+
         let loaded = url.flatMap { try? MLModel(contentsOf: $0, configuration: configuration) }
         guard let loaded else {
             model = nil
@@ -208,7 +206,7 @@ struct CoreMLListwiseCandidateRanker {
         guard let residuals = prediction.featureValue(for: "residual_scores")?.multiArrayValue,
               residuals.count >= ListwiseEncodedInput.maxCandidates else {
             throw NSError(
-                domain: "FastChIMEListwiseRanker",
+                domain: "XingYunIMEListwiseRanker",
                 code: 2,
                 userInfo: [NSLocalizedDescriptionKey: "missing residual_scores output"]
             )
@@ -320,6 +318,8 @@ struct CoreMLListwiseCandidateRanker {
             if FileManager.default.fileExists(atPath: url.path) { return url }
         }
         let candidates = [
+            FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support/行雲_繁-A/Models/\(modelName).mlmodelc"),
             FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Application Support/UnifyIME/Models/\(modelName).mlmodelc"),
             FileManager.default.homeDirectoryForCurrentUser

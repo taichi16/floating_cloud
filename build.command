@@ -1,5 +1,5 @@
 #!/bin/zsh
-# FastChIME 可安裝檔建置腳本
+# 行雲_繁-A 建置腳本
 # Finder 雙擊即可執行；預設只產生 .app，不部署系統輸入法。
 set -euo pipefail
 
@@ -51,7 +51,7 @@ HELP
 done
 
 # 主建置腳本會先清空 dist，再產生本次建置。
-echo "開始建置 FastChIME…"
+echo "開始建置 行雲_繁-A…"
 zsh "$BUILD_SCRIPT" "${ARGS[@]}"
 
 APP_SOURCE="$ROOT/bin/app/行雲_繁-A.app"
