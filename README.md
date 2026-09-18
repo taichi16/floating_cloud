@@ -24,12 +24,11 @@
 
 ## 重大修改歷程 (Changelog & Architecture Evolution)
 
-### 1. 徹底根除「幽靈重複項目」與系統偏好污染
-- **消除垃圾桶備份導致的幽靈索引**：
-  查明舊版安裝腳本習慣在更新時將舊 App 移至 `~/.Trash` 的歷史慣性。macOS LaunchServices 背景常駐程序會主動掃描垃圾桶內的合規 App，導致系統設定的鍵盤選單中累積多達數十個幽靈重複項目。新版安裝與卸載程式全面改為原生原地銷毀（`rm -rf`），杜絕垃圾桶產生幽靈備份。
-- **全面廢除私有 API 篡改偏好設定**：
-  徹底拔除過往私自調用非公開 API 直接強寫 `com.apple.HIToolbox.plist` 與 `com.apple.inputsources.plist` 的高風險「黑魔法」，回歸與 Apple 官方標準、知名開源專案（如 vChewing 唯音、McBopomofo 小麥注音）相同規格的標準系統 Input Method Kit 體系。
-
+### 1. 關於「重複項目」與系統偏好狀態的處理說明
+- **垃圾桶備份與重複索引現象**：
+  專案早期腳本曾透過垃圾桶搬移舊 App，並曾遇到 LaunchServices／TIS 重複註冊、Bundle ID 殘留及系統輸入來源狀態不一致問題。後續版本改以原地刪除（`rm -rf`）、TIS 去重、Bundle ID 整理及有限度的偏好狀態清理降低風險。
+- **系統偏好設定維護現況**：
+  為了解決現代 macOS 系統設定介面延遲生效問題，目前安裝與卸載腳本仍直接維護 `com.apple.HIToolbox` 與 `com.apple.inputsources` 的部分偏好鍵。因此不能宣稱完全不修改系統偏好，也不能僅由程式碼證明所有幽靈項目已被徹底清除，後續仍將持續朝向純標準 API 機制收斂。
 ### 2. 單一模式架構重構（Parent / Child 模式分離）
 - **根治輸入法項目重複雙胞胎**：
   在過往架構中，輸入法 App 本身與內部的 InputMode 容易被系統同時列出，造成選單列或系統設定中出現兩個同名項。
