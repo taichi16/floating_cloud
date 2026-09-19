@@ -79,7 +79,11 @@ enum MixedCompositionResolver {
         let isPureASCIIWord = rawBuffer.count <= 3 && rawBuffer.unicodeScalars.allSatisfy {
             $0.isASCII && CharacterSet.letters.contains($0)
         } && EnglishIMEEngine.isExactWord(rawBuffer)
-        let ambiguousShortEnglish = rawBuffer.count <= 3 && !isPureASCIIWord &&
+        // 修復：若注音緩衝區的當前讀音已有中文單字候選（hasExactPendingChinese），
+        // 即使 rawBuffer 恰好與英文單字完全吻合（如 "up" → ㄧㄣ → 音/因，31 筆），
+        // 也應視為有歧義，不可讓 isPureASCIIWord 直接屏蔽中文結果。
+        let ambiguousShortEnglish = rawBuffer.count <= 3 &&
+            (!isPureASCIIWord || hasExactPendingChinese) &&
             (hasExactPendingChinese || primarySegments.contains { LexiconStore.isDisplayableCandidate($0.value) })
         // 三鍵以內的序列若已形成有效中文讀音（例如 su3 → ㄋㄧˇ），
         // 不可因英文引擎把它視為 provisional prefix 而覆蓋中文結果。

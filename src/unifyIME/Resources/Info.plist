@@ -19,11 +19,11 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.26.0918</string>
+	<string>1.27.0919</string>
 	<key>CFBundleSignature</key>
 	<string>FCIN</string>
 	<key>CFBundleVersion</key>
-	<string>202609181300</string>
+	<string>202609190845</string>
 	<key>ComponentInputModeDict</key>
 	<dict>
 		<key>tsInputModeListKey</key>
