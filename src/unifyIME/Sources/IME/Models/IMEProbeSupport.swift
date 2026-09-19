@@ -338,7 +338,11 @@ final class IMEProbeEngine {
 
         // 1. 英文單字邊界：若當前 rawInputBuffer 已經是 exact English word，直接提交英文單字並加空格
         let raw = rawInputBuffer
-        if !raw.isEmpty,
+        let isSingleSyllable = readings.isEmpty && segmentOverrides.isEmpty
+        let pending = currentReading
+        let hasChineseForPending = isSingleSyllable && !pending.isEmpty && !(SessionCtl.traditionalChineseProvider.lexicon.commonCharacterMap[pending] ?? []).isEmpty
+        if !hasChineseForPending,
+           !raw.isEmpty,
            raw.unicodeScalars.allSatisfy({
                ($0.value >= 65 && $0.value <= 90)
                    || ($0.value >= 97 && $0.value <= 122)

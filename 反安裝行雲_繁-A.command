@@ -64,7 +64,7 @@ if let list = CFPreferencesCopyAppValue(thirdPartyKey, inputDomain) as? [[String
     CFPreferencesSynchronize(inputDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
 }
 
-if let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource] {
+if let list = TISCreateInputSourceList(nil, false)?.takeRetainedValue() as? [TISInputSource] {
     for s in list {
         let idPtr = TISGetInputSourceProperty(s, kTISPropertyInputSourceID)
         let id = idPtr != nil ? (Unmanaged<CFString>.fromOpaque(idPtr!).takeUnretainedValue() as String) : ""
@@ -75,14 +75,14 @@ if let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISI
 }
 '
 
-# 3. 從 LaunchServices 註銷
+# 3. 從 LaunchServices 註銷正式安裝路徑
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$TARGET" 2>/dev/null || true
 
 # 4. 徹底刪除實體檔案
 rm -rf "$TARGET"
 
-# 5. 重整選單列
-killall TextInputMenuAgent TextInputSwitcher 2>/dev/null || true
+# 5. 重整選單列與輸入法背景管理進程
+killall -9 imklaunchagent TextInputMenuAgent TextInputSwitcher 2>/dev/null || true
 
 echo
 echo "=========================================="

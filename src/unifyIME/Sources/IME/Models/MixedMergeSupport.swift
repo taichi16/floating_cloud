@@ -75,13 +75,17 @@ enum MixedCompositionResolver {
         // 因為同時能組出低品質注音片段而在同一段文字中前後不一致。
         let pendingReading = primaryState.currentReading
         let lexicon = SessionCtl.traditionalChineseProvider.lexicon
-        let hasExactPendingChinese = !(lexicon.commonCharacterMap[pendingReading] ?? []).isEmpty
+        let isSingleChineseSyllable = primarySegments.count <= 1
+            && primaryState.readings.isEmpty
+            && !pendingReading.isEmpty
+        let hasExactPendingChinese = isSingleChineseSyllable
+            && !(lexicon.commonCharacterMap[pendingReading] ?? []).isEmpty
         let isPureASCIIWord = rawBuffer.count <= 3 && rawBuffer.unicodeScalars.allSatisfy {
             $0.isASCII && CharacterSet.letters.contains($0)
         } && EnglishIMEEngine.isExactWord(rawBuffer)
-        // 修復：若注音緩衝區的當前讀音已有中文單字候選（hasExactPendingChinese），
-        // 即使 rawBuffer 恰好與英文單字完全吻合（如 "up" → ㄧㄣ → 音/因，31 筆），
-        // 也應視為有歧義，不可讓 isPureASCIIWord 直接屏蔽中文結果。
+        // 只有在 rawBuffer 構成「單一未破碎注音音節」（如 up → ㄧㄣ，音/因/陰 31 筆）時，
+        // 才視為中英歧義候選；若是 how（ㄘㄟ/ㄊ）、you（ㄗㄟ/ㄧ）等破碎切分序列，
+        // 必須優先保留英文，防止大量日常英文單字退化為注音碎片與選字負擔。
         let ambiguousShortEnglish = rawBuffer.count <= 3 &&
             (!isPureASCIIWord || hasExactPendingChinese) &&
             (hasExactPendingChinese || primarySegments.contains { LexiconStore.isDisplayableCandidate($0.value) })

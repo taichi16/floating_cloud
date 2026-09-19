@@ -33,6 +33,8 @@ echo
 
 # 1. 結束執行中進程並清理舊版
 killall UnifyIME 2>/dev/null || true
+# 清理來源端已知註冊紀錄的防禦性步驟，不代表完整歷史註冊清理
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$SRC_APP" 2>/dev/null || true
 rm -rf "$TARGET"
 mkdir -p "$HOME/Library/Input Methods"
 
@@ -120,4 +122,4 @@ echo "已自動啟用並登錄於系統輸入法選單。"
 echo
 
 osascript -e 'display notification "行雲_繁-A 已成功啟用！" with title "行雲_繁-A" subtitle "安裝成功"' 2>/dev/null || true
-osascript -e 'display dialog "行雲_繁-A 安裝完成！\n\n已成功啟用並加入輸入法選單，您可直接切換使用。" with title "行雲_繁-A 安裝程式" buttons {"完成"} default button "完成" with icon note' 2>/dev/null || true
+osascript -e 'display dialog "行雲_繁-A 安裝完成！\n\n已成功啟用並加入輸入法選單，您可直接切換使用。" with title "行雲_繁-A 安裝程式" buttons {"完成"} default button "完成" with icon note giving up after 5' 2>/dev/null || true

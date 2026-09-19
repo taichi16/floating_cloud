@@ -1348,6 +1348,19 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
 
         guard EnglishIMEEngine.isExactWord(raw) else { return false }
 
+        // 若當前輸入緩衝區（raw）在注音中對應到「單一未破碎」的合法中文有字讀音（例如 up → ㄧㄣ，有 音/因/陰 等 31 字），
+        // 且本次觸發包含空格邊界（includeSeparator == true，即按下空白鍵），
+        // 應將空白鍵視為注音一聲（定音）與選字處理，不可強行將其作為英文單字直接送出。
+        // 若為 how（ㄘㄟ/ㄊ）、you（ㄗㄟ/ㄧ）等破碎切分序，絕不阻擋英文輸出。
+        if includeSeparator {
+            let isSingleSyllable = readings.isEmpty && segmentOverrides.isEmpty
+            let pending = currentReading
+            let hasChineseForPending = isSingleSyllable && !pending.isEmpty && !(SessionCtl.traditionalChineseProvider.lexicon.commonCharacterMap[pending] ?? []).isEmpty
+            if hasChineseForPending {
+                return false
+            }
+        }
+
         let englishText = EnglishIMEEngine.exactSurfaceCandidates(for: raw).first ?? raw
         let textToInsert = includeSeparator ? (englishText + " ") : englishText
         let replaceRange = currentMarkedRange(for: input)

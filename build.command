@@ -66,6 +66,9 @@ fi
 rm -rf "$APP_DEST"
 ditto "$APP_SOURCE" "$APP_DEST"
 
+# 確保非安裝路徑實體不被 LaunchServices 註冊，避免 TIS 產生重複幽靈實例
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$APP_SOURCE" "$APP_DEST" 2>/dev/null || true
+
 echo
 echo "可安裝檔已建立："
 echo "  $APP_DEST"
