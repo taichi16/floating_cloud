@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>行雲_繁-A</string>
+	<string>行雲</string>
 	<key>CFBundleExecutable</key>
 	<string>UnifyIME</string>
 	<key>CFBundleIconFile</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>行雲_繁-A</string>
+	<string>行雲</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -104,7 +104,7 @@
 	<key>TISIconLabels</key>
 	<dict>
 		<key>Primary</key>
-		<string>行雲_繁-A</string>
+		<string>行雲</string>
 	</dict>
 	<key>TISParticipatesInTouchBar</key>
 	<false/>

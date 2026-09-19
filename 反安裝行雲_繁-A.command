@@ -28,6 +28,11 @@ echo "🧹 正在移除 行雲_繁-A..."
 # 1. 終止進程
 killall UnifyIME 2>/dev/null || true
 
+# 卸載可能已掛載的安裝磁碟
+hdiutil info | grep -B 1 -A 5 "行雲" | grep "/dev/disk" | awk '{print $1}' | while read dev; do
+    diskutil eject force "$dev" 2>/dev/null || hdiutil detach "$dev" -force 2>/dev/null || true
+done
+
 # 2. 精準自偏好設定與 TIS 核心中停用移除，徹底防範幽靈句柄
 swift -e '
 import Foundation
@@ -64,7 +69,7 @@ if let list = CFPreferencesCopyAppValue(thirdPartyKey, inputDomain) as? [[String
     CFPreferencesSynchronize(inputDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
 }
 
-if let list = TISCreateInputSourceList(nil, false)?.takeRetainedValue() as? [TISInputSource] {
+if let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource] {
     for s in list {
         let idPtr = TISGetInputSourceProperty(s, kTISPropertyInputSourceID)
         let id = idPtr != nil ? (Unmanaged<CFString>.fromOpaque(idPtr!).takeUnretainedValue() as String) : ""
@@ -75,8 +80,13 @@ if let list = TISCreateInputSourceList(nil, false)?.takeRetainedValue() as? [TIS
 }
 '
 
-# 3. 從 LaunchServices 註銷正式安裝路徑
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$TARGET" 2>/dev/null || true
+# 3. 從 LaunchServices 註銷所有已知副本與正式安裝路徑
+for p in "$TARGET" "$DIR/bin/app/$APP_NAME" "$DIR/dist/$APP_NAME" "/Users/taichi/AI/ffloating_cloud_C/bin/app/$APP_NAME"; do
+    if [[ -d "$p" ]]; then
+        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$p" 2>/dev/null || true
+    fi
+done
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -gc
 
 # 4. 徹底刪除實體檔案
 rm -rf "$TARGET"

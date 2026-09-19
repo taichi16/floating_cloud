@@ -42,6 +42,11 @@ fi
 
 echo "📦 應用程式來源: $SOURCE_APP"
 
+# 確保過去掛載的安裝磁碟已卸載，防止 LaunchServices 索引多餘副本
+hdiutil info | grep -B 1 -A 5 "行雲" | grep "/dev/disk" | awk '{print $1}' | while read dev; do
+    diskutil eject force "$dev" 2>/dev/null || hdiutil detach "$dev" -force 2>/dev/null || true
+done
+
 # 2. 準備打包暫存目錄
 echo "📂 正在配置 DMG 映像檔內容結構..."
 rm -rf "$BUILD_DIR"
