@@ -129,9 +129,10 @@ if [[ -f "$DMG_ICON" && -f "$OUTPUT_DMG" ]]; then
 fi
 
 # 移除 dist/ 中裸露的 .app，只保留 .dmg，防止 macOS LaunchServices 重複掃描
-rm -rf "$DIST_APP" 2>/dev/null || true
+# 注意：必須先呼叫 lsregister -u 註銷路徑，再執行 rm -rf，避免系統註冊表殘留幽靈記錄
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$DIST_APP" 2>/dev/null || true
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$BIN_APP" 2>/dev/null || true
+rm -rf "$DIST_APP" 2>/dev/null || true
 
 echo
 

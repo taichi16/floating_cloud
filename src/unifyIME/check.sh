@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 WORKSPACE_ROOT="$(cd "$ROOT/../.." && pwd)"
-APP_BIN="$WORKSPACE_ROOT/bin/app/全一輸入法.app/Contents/MacOS/UnifyIME"
+APP_BIN="$WORKSPACE_ROOT/bin/app/行雲_繁-A.app/Contents/MacOS/UnifyIME"
 REPORT_SCRIPT="$ROOT/scripts/test_report.py"
 REPORT_ROOT="$WORKSPACE_ROOT/doc/test-results"
 RUN_SELFTEST=1

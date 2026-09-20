@@ -67,6 +67,10 @@ private enum EnglishLexiconStore {
         cachedExactMap = exactMap
     }
 
+    static func prewarm() {
+        ensureLoaded()
+    }
+
     static func entries() -> [EnglishLexiconEntry] {
         ensureLoaded()
         return cachedEntries ?? []
@@ -227,6 +231,10 @@ private func isExplicitEnglishBoundary(_ token: String) -> Bool {
 }
 
 struct EnglishIMEEngine: CompositionLanguageBehavior {
+    static func prewarm() {
+        EnglishLexiconStore.prewarm()
+    }
+
     static func exactSurfaceCandidates(for token: String) -> [String] {
         let normalized = normalizeEnglishToken(token)
         guard !normalized.isEmpty else { return [] }

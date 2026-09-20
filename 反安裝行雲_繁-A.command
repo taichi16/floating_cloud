@@ -105,16 +105,19 @@ if let list = CFPreferencesCopyAppValue(thirdPartyKey, inputDomain) as? [[String
 # 2. 終止背景程序
 killall UnifyIME 2>/dev/null || true
 
-# 3. 刪除使用者目錄實體檔案
+# 3. 從 LaunchServices 註銷安裝路徑（必須在刪除實體檔案前執行，避免殘留幽靈項目）
+if [[ -x "$LSREGISTER" && -d "$TARGET" ]]; then
+    echo "🧹 正在清理 LaunchServices 註冊表..."
+    $LSREGISTER -u "$TARGET" 2>/dev/null || true
+fi
+
+# 4. 刪除使用者目錄實體檔案
 if [[ -d "$TARGET" ]]; then
     echo "🗑️ 正在刪除應用程式: $TARGET"
     rm -rf "$TARGET"
 fi
 
-# 4. 從 LaunchServices 註銷安裝路徑
 if [[ -x "$LSREGISTER" ]]; then
-    echo "🧹 正在清理 LaunchServices 註冊表..."
-    $LSREGISTER -u "$TARGET" 2>/dev/null || true
     $LSREGISTER -gc 2>/dev/null || true
 fi
 

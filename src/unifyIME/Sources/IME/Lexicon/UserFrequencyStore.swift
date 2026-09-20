@@ -47,6 +47,16 @@ enum UserFrequencyStore {
 
     // MARK: - 公開 API
 
+    /// 預熱指定語言的使用者詞頻快取；不更動 revision，不標記 dirty。
+    static func prewarm(languageID: String = "zh-Hant") {
+        guard shouldTrack(languageID) else { return }
+        stateLock.lock()
+        if cache[languageID] == nil {
+            cache[languageID] = loadFromDisk(languageID: languageID)
+        }
+        stateLock.unlock()
+    }
+
     /// 記錄一次使用者選取；應在候選確認後呼叫。
     static func record(languageID: String, reading: String, surface: String) {
         guard shouldTrack(languageID) else { return }

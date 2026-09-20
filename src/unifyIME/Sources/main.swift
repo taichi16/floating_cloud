@@ -704,7 +704,6 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
         "ㄊㄚ": ["他"],
         "ㄊㄚㄇㄣ": ["他們"],
         "ㄊㄚˇ": ["塔"],
-        "ㄊㄚˋ": ["大"],
         "ㄕˋ": ["是", "試"],
         "ㄕ": ["是"],
         "ㄕˋㄕˋ": ["試試"],
@@ -906,6 +905,8 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
     static func prewarmChinesePredictionRuntime() {
         LexiconStore.prewarmPhraseContextStats()
         prewarmLexicon()
+        UserFrequencyStore.prewarm(languageID: traditionalChineseProvider.languageID)
+        EnglishIMEEngine.prewarm()
         _ = traditionalChineseProvider.resolveCandidates(for: "ㄧ˙")
         _ = traditionalChineseProvider.resolveComposition(
             tokens: [InputToken(languageID: traditionalChineseProvider.languageID, rawValue: "ㄧ˙")]

@@ -6,7 +6,7 @@
 
 ## 1. 快速安裝
 
-1. 掛載發布的 `行雲_繁-A_安裝磁碟.dmg`（或 `XingYun_v1.2.0.dmg`）。
+1. 掛載發布的 `行雲_繁-A_安裝磁碟.dmg`（或 `XingYun_v1.2.1.dmg`）。
 2. 雙擊執行「**安裝行雲_繁-A.command**」：
    - 將應用程式複製至目前使用者的個人輸入法目錄：`~/Library/Input Methods/行雲_繁-A.app`。
    - 透過 `codesign` 進行本機 ad-hoc 簽名。
