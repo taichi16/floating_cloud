@@ -4,6 +4,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="行雲_繁-A.app"
 TARGET="$HOME/Library/Input Methods/$APP_NAME"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 SRC_APP=""
 
 if [[ -d "$DIR/$APP_NAME" ]]; then
@@ -16,12 +17,21 @@ fi
 
 if [[ -z "$SRC_APP" || ! -d "$SRC_APP" ]]; then
     echo "🔨 正在建置最新版本的 行雲_繁-A..."
-    "$DIR/build.command"
+    if [[ -x "$DIR/build.command" ]]; then
+        "$DIR/build.command"
+    elif [[ -x "$DIR/src/unifyIME/build.sh" ]]; then
+        "$DIR/src/unifyIME/build.sh"
+    fi
     if [[ -d "$DIR/dist/$APP_NAME" ]]; then
         SRC_APP="$DIR/dist/$APP_NAME"
     elif [[ -d "$DIR/bin/app/$APP_NAME" ]]; then
         SRC_APP="$DIR/bin/app/$APP_NAME"
     fi
+fi
+
+if [[ -z "$SRC_APP" || ! -d "$SRC_APP" ]]; then
+    echo "❌ 找不到可安裝的 $APP_NAME 來源。"
+    exit 1
 fi
 
 echo "=========================================="
@@ -34,17 +44,10 @@ echo
 # 1. 結束執行中進程並清理舊版
 killall UnifyIME 2>/dev/null || true
 
-# 卸載可能已掛載的安裝磁碟，防止 LaunchServices 掃描到磁碟內副本
-hdiutil info | grep -B 1 -A 5 "行雲" | grep "/dev/disk" | awk '{print $1}' | while read dev; do
-    diskutil eject force "$dev" 2>/dev/null || hdiutil detach "$dev" -force 2>/dev/null || true
-done
-
-# 清理各處開發與建置副本在 LaunchServices 中的幽靈註冊
-for p in "$SRC_APP" "$DIR/bin/app/$APP_NAME" "$DIR/dist/$APP_NAME" "/Users/taichi/AI/ffloating_cloud_C/bin/app/$APP_NAME"; do
-    if [[ -d "$p" ]]; then
-        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$p" 2>/dev/null || true
-    fi
-done
+# 檢查是否有已掛載的安裝磁碟，若有則提醒使用者
+if hdiutil info 2>/dev/null | grep -q "行雲_繁-A 安裝磁碟"; then
+    echo "💡 提示：偵測到「行雲_繁-A 安裝磁碟」掛載中。建議安裝完成後手動推出安裝映像檔，避免系統快取多餘副本。"
+fi
 
 rm -rf "$TARGET"
 mkdir -p "$HOME/Library/Input Methods"
@@ -59,42 +62,47 @@ else
 fi
 
 # 3. 向 macOS LaunchServices 核心註冊正式路徑並整理資料庫
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET"
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -gc
+if [[ -x "$LSREGISTER" ]]; then
+    $LSREGISTER -f "$TARGET"
+    $LSREGISTER -gc 2>/dev/null || true
+fi
 
-# 4. 精準寫入 AppleEnabledInputSources 並透過 TIS 啟用（排他性單一啟用，徹底杜絕幽靈雙胞胎）
+# 4. 精準寫入 AppleEnabledInputSources 並透過 TIS 啟用（排他性單一啟用，杜絕重複）
 swift -e '
 import Foundation
 import CoreFoundation
 import Carbon
 
-// 4.1 清理 com.apple.inputsources (AppleEnabledThirdPartyInputSources 只留一筆 Keyboard Input Method)
+let targetBundleID = "com.vader.inputmethod.XingYunIME"
+let targetModeID = "com.vader.inputmethod.XingYunIME.Bopomofo"
+
+// 4.1 清理 com.apple.inputsources (AppleEnabledThirdPartyInputSources 精確比對只留一筆)
 let inputDomain = "com.apple.inputsources" as CFString
 let thirdPartyKey = "AppleEnabledThirdPartyInputSources" as CFString
 if let currentVal = CFPreferencesCopyAppValue(thirdPartyKey, inputDomain) as? [[String: Any]] {
     var filtered = currentVal.filter { item in
         guard let b = item["Bundle ID"] as? String else { return true }
-        return !b.contains("XingYunIME")
+        return b != targetBundleID
     }
     filtered.append([
-        "Bundle ID": "com.vader.inputmethod.XingYunIME",
+        "Bundle ID": targetBundleID,
         "InputSourceKind": "Keyboard Input Method"
     ])
     CFPreferencesSetAppValue(thirdPartyKey, filtered as CFArray, inputDomain)
     CFPreferencesSynchronize(inputDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
 }
 
-// 4.2 清理 com.apple.HIToolbox (AppleEnabledInputSources 只留一筆唯一的 Bopomofo Input Mode)
+// 4.2 清理 com.apple.HIToolbox (AppleEnabledInputSources 精確比對只留一筆唯一的 Bopomofo Input Mode)
 let domain = "com.apple.HIToolbox" as CFString
 let key = "AppleEnabledInputSources" as CFString
 if let currentVal = CFPreferencesCopyAppValue(key, domain) as? [[String: Any]] {
     var filtered = currentVal.filter { item in
         guard let b = item["Bundle ID"] as? String else { return true }
-        return !b.contains("XingYunIME")
+        return b != targetBundleID
     }
     filtered.append([
-        "Bundle ID": "com.vader.inputmethod.XingYunIME",
-        "Input Mode": "com.vader.inputmethod.XingYunIME.Bopomofo",
+        "Bundle ID": targetBundleID,
+        "Input Mode": targetModeID,
         "InputSourceKind": "Input Mode"
     ])
     CFPreferencesSetAppValue(key, filtered as CFArray, domain)
@@ -107,9 +115,9 @@ if let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISI
     for s in list {
         let idPtr = TISGetInputSourceProperty(s, kTISPropertyInputSourceID)
         let id = idPtr != nil ? (Unmanaged<CFString>.fromOpaque(idPtr!).takeUnretainedValue() as String) : ""
-        if id == "com.vader.inputmethod.XingYunIME.Bopomofo" {
+        if id == targetModeID {
             bopomofoSources.append(s)
-        } else if id == "com.vader.inputmethod.XingYunIME" {
+        } else if id == targetBundleID {
             TISDisableInputSource(s)
         }
     }
@@ -117,7 +125,11 @@ if let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISI
         for old in bopomofoSources.dropLast() {
             TISDisableInputSource(old)
         }
-        TISEnableInputSource(primary)
+        let isEnabledPtr = TISGetInputSourceProperty(primary, kTISPropertyInputSourceIsEnabled)
+        let isEnabled = isEnabledPtr != nil ? CFBooleanGetValue(Unmanaged<CFBoolean>.fromOpaque(isEnabledPtr!).takeUnretainedValue()) : false
+        if !isEnabled {
+            TISEnableInputSource(primary)
+        }
         TISSelectInputSource(primary)
     }
 }
@@ -133,5 +145,7 @@ echo "=========================================="
 echo "已自動啟用並登錄於系統輸入法選單。"
 echo
 
-osascript -e 'display notification "行雲_繁-A 已成功啟用！" with title "行雲_繁-A" subtitle "安裝成功"' 2>/dev/null || true
-osascript -e 'display dialog "行雲_繁-A 安裝完成！\n\n已成功啟用並加入輸入法選單，您可直接切換使用。" with title "行雲_繁-A 安裝程式" buttons {"完成"} default button "完成" with icon note giving up after 5' 2>/dev/null || true
+if [[ "${1:-}" != "--force" && "${1:-}" != "-f" ]]; then
+    osascript -e 'display notification "行雲_繁-A 已成功啟用！" with title "行雲_繁-A" subtitle "安裝成功"' 2>/dev/null || true
+    osascript -e 'display dialog "行雲_繁-A 安裝完成！\n\n已成功啟用並加入輸入法選單，您可直接切換使用。" with title "行雲_繁-A 安裝程式" buttons {"完成"} default button "完成" with icon note giving up after 5' 2>/dev/null || true
+fi

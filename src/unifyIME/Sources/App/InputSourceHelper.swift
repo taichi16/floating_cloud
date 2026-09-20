@@ -39,7 +39,10 @@ struct InputSourceHelper {
     }
 
     static func enable(inputSource: TISInputSource) -> Bool {
-        TISEnableInputSource(inputSource) == noErr
+        if inputSourceEnabled(for: inputSource) {
+            return true
+        }
+        return TISEnableInputSource(inputSource) == noErr
     }
 
     static func select(inputSource: TISInputSource) -> Bool {
