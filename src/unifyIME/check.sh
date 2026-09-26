@@ -10,16 +10,45 @@ RUN_SELFTEST=1
 RUN_NATIVE_IMK=1
 BUILD_ARGS=()
 
+usage() {
+  cat <<'USAGE'
+用法：zsh src/unifyIME/check.sh [選項]
+
+測試選項：
+  --skip-selftest       略過 raw regression selftest
+  --skip-native-imk     略過原生 InputMethodKit host 測試
+
+建置選項：
+  --debug | --release
+  --no-deploy | --deploy
+  --skip-sign | --sign
+  --arch=arm64|x86_64
+  --macos-target=版本
+  --sign-identity=識別字
+
+不帶 --skip-native-imk 時，測試流程預設會部署建置結果；若只需建置／CLI 測試，請指定 --skip-native-imk。
+USAGE
+}
+
 for arg in "$@"; do
   case "$arg" in
+    --help|-h)
+      usage
+      exit 0
+      ;;
     --skip-selftest)
       RUN_SELFTEST=0
       ;;
     --skip-native-imk)
       RUN_NATIVE_IMK=0
       ;;
-    *)
+    --debug|--release|--deploy|--no-deploy|--skip-sign|--sign|--arch=*|--macos-target=*|--sign-identity=*)
       BUILD_ARGS+=("$arg")
+      ;;
+    *)
+      print -u2 "未知選項：$arg"
+      usage >&2
+      exit 2
       ;;
   esac
 done
@@ -198,7 +227,7 @@ if (( RUN_NATIVE_IMK == 1 )) && (( BUILD_EXIT == 0 )) && [[ -x "$APP_BIN" ]] && 
     UNIFYIME_RUNTIME_TRACE_ENABLED=1 \
     UNIFYIME_RUNTIME_TRACE="$HOST_TRACE_PATH" \
     zsh "$ROOT/scripts/run_native_imk_host_smoke.command" \
-    "$HOST_REPORT_JSON" "$HOST_TRACE_PATH" "$HOME/Library/Input Methods/全一輸入法.app"
+    "$HOST_REPORT_JSON" "$HOST_TRACE_PATH" "$HOME/Library/Input Methods/行雲_繁-A.app"
 elif (( RUN_NATIVE_IMK == 0 )); then
   record_manual_stage "native IMK AppKit host smoke" "skip"
 else

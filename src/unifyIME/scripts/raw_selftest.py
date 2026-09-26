@@ -47,18 +47,23 @@ def move_test_artifact_to_trash(path: Path) -> None:
     print(f"[raw selftest] 測試目錄已移至 Trash：{destination}", flush=True)
 
 
-def load_cases() -> list[dict[str, str]]:
-    rows: list[dict[str, str]] = []
+def load_cases() -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
     with CASE_FILE.open(encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
             if not line:
                 continue
             payload = json.loads(line)
-            rows.append({
+            case: dict[str, object] = {
                 "category": str(payload["category"]),
                 "sentence": str(payload["sentence"]),
-            })
+                "expected": str(payload.get("expected", payload["sentence"])),
+            }
+            row_keys = payload.get("row_keys")
+            if isinstance(row_keys, list) and row_keys and all(isinstance(key, str) for key in row_keys):
+                case["row_keys"] = row_keys
+            rows.append(case)
     return rows
 
 
@@ -207,11 +212,14 @@ def main() -> int:
                     failures.append((idx, category, sentence, f"invalid {probe_cmd} json", probe_lines[line_index]))
                     category_failed_before_action += 1
                     continue
-                if not payload.get("resolved"):
+                case = cases[idx - 1]
+                explicit_row_keys = case.get("row_keys")
+                has_explicit_row_keys = isinstance(explicit_row_keys, list) and bool(explicit_row_keys)
+                if not payload.get("resolved") and not has_explicit_row_keys:
                     skipped.append((idx, category, sentence))
                     continue
 
-                row_keys = payload.get("row_keys")
+                row_keys = explicit_row_keys if has_explicit_row_keys else payload.get("row_keys")
                 key_tokens = payload.get("key_tokens")
                 key_sequence = payload.get("key_sequence", "")
                 if isinstance(row_keys, list) and row_keys:
@@ -230,7 +238,8 @@ def main() -> int:
                     "row_id": row_id,
                     "row_keys": tokens,
                 })
-                resolved_cases[row_id] = (idx, sentence, key_sequence)
+                expected = str(case.get("expected", sentence))
+                resolved_cases[row_id] = (idx, expected, key_sequence)
 
             if not batch_rows:
                 if category_failed_before_action:

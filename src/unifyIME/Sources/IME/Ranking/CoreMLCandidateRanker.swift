@@ -55,16 +55,16 @@ struct CoreMLCandidateRanker: UnifiedCandidateRanker {
     func score(unit: CandidateUnit, context: CandidateSelectionContext) -> Double {
         let heuristicScore = fallback.score(unit: unit, context: context)
         let engineMode = currentCandidateEngineMode
-        let processEnv = ProcessInfo.processInfo.environment
-        let coreMLOutputOnly = processEnv["UNIFYIME_COREML_ONLY_RANKER"] == "1"
-            || processEnv["FASTCHIME_COREML_ONLY_RANKER"] == "1"
-            || engineMode == .aiDecides
         if engineMode == .traditionalOnly {
             return heuristicScore
         }
         guard let model else {
             return heuristicScore
         }
+        let processEnv = ProcessInfo.processInfo.environment
+        let coreMLOutputOnly = processEnv["UNIFYIME_COREML_ONLY_RANKER"] == "1"
+            || processEnv["FASTCHIME_COREML_ONLY_RANKER"] == "1"
+            || engineMode == .aiDecides
 
         let vector = encoder.encode(unit: unit, context: context)
         do {

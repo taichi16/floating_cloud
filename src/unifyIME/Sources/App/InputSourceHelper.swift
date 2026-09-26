@@ -91,11 +91,14 @@ struct InputSourceHelper {
             matching bundleID: String,
             modeID: String?
         ) {
-            if let index = entries.firstIndex(where: { existing in
+            let indices = entries.indices.filter { index in
+                let existing = entries[index]
                 guard existing["Bundle ID"] as? String == bundleID else { return false }
                 return (existing["Input Mode"] as? String) == modeID
-            }) {
-                entries[index] = entry
+            }
+            if let first = indices.first {
+                entries[first] = entry
+                for index in indices.dropFirst().reversed() { entries.remove(at: index) }
             } else {
                 entries.append(entry)
             }
@@ -130,23 +133,11 @@ struct InputSourceHelper {
         CFPreferencesSetAppValue(historyKey, history as CFPropertyList, hitoolboxPreferencesID)
         guard CFPreferencesAppSynchronize(hitoolboxPreferencesID) else { return false }
 
-        // 同步寫入 com.apple.inputsources (標準格式僅登錄 Keyboard Input Method 根 Bundle ID)
-        let inputsourcesID = "com.apple.inputsources" as CFString
-        let thirdPartyKey = "AppleEnabledThirdPartyInputSources" as CFString
-        var thirdParty = (CFPreferencesCopyAppValue(thirdPartyKey, inputsourcesID) as? [[String: Any]]) ?? []
-        thirdParty = thirdParty.filter { ($0["Bundle ID"] as? String) != parentID }
-        thirdParty.append([
-            "Bundle ID": parentID,
-            "InputSourceKind": "Keyboard Input Method"
-        ])
-        CFPreferencesSetAppValue(thirdPartyKey, thirdParty as CFPropertyList, inputsourcesID)
-        CFPreferencesAppSynchronize(inputsourcesID)
-
         let persistedEnabled = readEntries(enabledKey)
         let modesPersisted = modeIDs.allSatisfy { modeID in
-            persistedEnabled.contains {
+            persistedEnabled.filter {
                 $0["Bundle ID"] as? String == parentID && ($0["Input Mode"] as? String) == modeID
-            }
+            }.count == 1
         }
         return modesPersisted
     }
@@ -157,11 +148,12 @@ struct InputSourceHelper {
         let selectedKey = "AppleSelectedInputSources" as CFString
         let historyKey = "AppleInputSourceHistory" as CFString
 
+        func readEntries(_ key: CFString) -> [[String: Any]] {
+            (CFPreferencesCopyAppValue(key, hitoolboxPreferencesID) as? [[String: Any]]) ?? []
+        }
+
         func filterEntries(_ key: CFString) -> [[String: Any]] {
-            guard let value = CFPreferencesCopyAppValue(key, hitoolboxPreferencesID) as? [[String: Any]] else {
-                return []
-            }
-            return value.filter { ($0["Bundle ID"] as? String) != parentID }
+            readEntries(key).filter { ($0["Bundle ID"] as? String) != parentID }
         }
 
         let enabled = filterEntries(enabledKey)
@@ -169,20 +161,16 @@ struct InputSourceHelper {
         let history = filterEntries(historyKey)
 
         CFPreferencesSetAppValue(enabledKey, enabled as CFPropertyList, hitoolboxPreferencesID)
-        if !selected.isEmpty {
-            CFPreferencesSetAppValue(selectedKey, selected as CFPropertyList, hitoolboxPreferencesID)
-        }
+        CFPreferencesSetAppValue(selectedKey, selected as CFPropertyList, hitoolboxPreferencesID)
         CFPreferencesSetAppValue(historyKey, history as CFPropertyList, hitoolboxPreferencesID)
-        _ = CFPreferencesAppSynchronize(hitoolboxPreferencesID)
+        guard CFPreferencesAppSynchronize(hitoolboxPreferencesID) else { return false }
 
-        let inputsourcesID = "com.apple.inputsources" as CFString
-        let thirdPartyKey = "AppleEnabledThirdPartyInputSources" as CFString
-        if let list = CFPreferencesCopyAppValue(thirdPartyKey, inputsourcesID) as? [[String: Any]] {
-            let filtered = list.filter { ($0["Bundle ID"] as? String) != parentID }
-            CFPreferencesSetAppValue(thirdPartyKey, filtered as CFPropertyList, inputsourcesID)
-            CFPreferencesAppSynchronize(inputsourcesID)
-        }
-        return true
+        let remainingEnabled = readEntries(enabledKey)
+        let remainingSelected = readEntries(selectedKey)
+        let remainingHistory = readEntries(historyKey)
+        return !remainingEnabled.contains { ($0["Bundle ID"] as? String) == parentID }
+            && !remainingSelected.contains { ($0["Bundle ID"] as? String) == parentID }
+            && !remainingHistory.contains { ($0["Bundle ID"] as? String) == parentID }
     }
 
     static func selfHealDeduplicateInputSources() {

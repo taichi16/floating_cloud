@@ -460,43 +460,88 @@ func runtimeInputSourceMetadata() -> String {
 import os.log
 
 private let imeUnifiedLog = OSLog(subsystem: "com.vader.inputmethod.UnifyIME", category: "IME")
+private let runtimeTraceFileLock = NSLock()
+private let runtimeTraceFileLimit = 10 * 1024 * 1024
+private let runtimeTraceRotationCount = 3
+private let runtimeTraceRecordLimit = 256 * 1024
 
-func appendRuntimeTrace(_ line: String) {
-    os_log("%{public}@", log: imeUnifiedLog, type: .default, line)
-    guard isRuntimeTraceEnabled else { return }
-#if UNIFYIME_CLI
-    // CLI 與 App 共用同一 trace；CLI 額外鏡像到 stderr，方便探針收集。
-    fputs("[trace] \(line)\n", stderr)
-#endif
-    let text = "[\(ISO8601DateFormatter().string(from: Date()))] \(line)\n"
-    guard let data = text.data(using: .utf8) else { return }
-    try? FileManager.default.createDirectory(at: runtimeTraceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    if FileManager.default.fileExists(atPath: runtimeTraceURL.path),
-       let handle = try? FileHandle(forWritingTo: runtimeTraceURL) {
-        _ = try? handle.seekToEnd()
-        try? handle.write(contentsOf: data)
-        try? handle.close()
-    } else {
-        try? data.write(to: runtimeTraceURL)
+private func boundedTraceRecord(_ line: String) -> String {
+    let marker = " [trace record truncated]"
+    let maximum = runtimeTraceRecordLimit - marker.utf8.count
+    guard line.utf8.count > runtimeTraceRecordLimit else { return line }
+    return String(decoding: line.utf8.prefix(maximum), as: UTF8.self) + marker
+}
+
+private func appendBoundedRuntimeTrace(_ rawData: Data) {
+    let suffix = Data("\n[trace record truncated]\n".utf8)
+    let data = rawData.count <= runtimeTraceRecordLimit
+        ? rawData
+        : Data(rawData.prefix(runtimeTraceRecordLimit - suffix.count)) + suffix
+    let manager = FileManager.default
+    runtimeTraceFileLock.lock()
+    defer { runtimeTraceFileLock.unlock() }
+    do {
+        try manager.createDirectory(at: runtimeTraceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var currentSize = (try? manager.attributesOfItem(atPath: runtimeTraceURL.path)[.size] as? NSNumber)?.intValue ?? 0
+        if currentSize > runtimeTraceFileLimit {
+            let input = try FileHandle(forReadingFrom: runtimeTraceURL)
+            try input.seek(toOffset: UInt64(currentSize - runtimeTraceFileLimit))
+            let tail = try input.readToEnd() ?? Data()
+            try input.close()
+            try tail.write(to: runtimeTraceURL, options: .atomic)
+            currentSize = tail.count
+        }
+        if currentSize + data.count > runtimeTraceFileLimit {
+            let oldest = runtimeTraceURL.appendingPathExtension("\(runtimeTraceRotationCount)")
+            try? manager.removeItem(at: oldest)
+            if runtimeTraceRotationCount > 1 {
+                for index in stride(from: runtimeTraceRotationCount - 1, through: 1, by: -1) {
+                    let source = runtimeTraceURL.appendingPathExtension("\(index)")
+                    if manager.fileExists(atPath: source.path) {
+                        try? manager.removeItem(at: runtimeTraceURL.appendingPathExtension("\(index + 1)"))
+                        try manager.moveItem(at: source, to: runtimeTraceURL.appendingPathExtension("\(index + 1)"))
+                    }
+                }
+            }
+            if currentSize > 0 {
+                try manager.moveItem(at: runtimeTraceURL, to: runtimeTraceURL.appendingPathExtension("1"))
+            }
+        }
+        if manager.fileExists(atPath: runtimeTraceURL.path) {
+            let handle = try FileHandle(forWritingTo: runtimeTraceURL)
+            try handle.seekToEnd()
+            try handle.write(contentsOf: data)
+            try handle.close()
+        } else {
+            try data.write(to: runtimeTraceURL, options: .atomic)
+        }
+    } catch {
+        return
     }
 }
 
-func appendFocusedTrace(_ line: String) {
+func appendRuntimeTrace(_ makeLine: @autoclosure () -> String) {
     guard isRuntimeTraceEnabled else { return }
+    let record = boundedTraceRecord(makeLine())
+    os_log("%{public}@", log: imeUnifiedLog, type: .default, record)
 #if UNIFYIME_CLI
-    fputs("[trace][focus] \(line)\n", stderr)
+    // CLI 與 App 共用同一 trace；CLI 額外鏡像到 stderr，方便探針收集。
+    fputs("[trace] \(record)\n", stderr)
 #endif
-    let text = "[\(ISO8601DateFormatter().string(from: Date()))] [focus] \(line)\n"
+    let text = "[\(ISO8601DateFormatter().string(from: Date()))] \(record)\n"
     guard let data = text.data(using: .utf8) else { return }
-    try? FileManager.default.createDirectory(at: runtimeTraceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    if FileManager.default.fileExists(atPath: runtimeTraceURL.path),
-       let handle = try? FileHandle(forWritingTo: runtimeTraceURL) {
-        _ = try? handle.seekToEnd()
-        try? handle.write(contentsOf: data)
-        try? handle.close()
-    } else {
-        try? data.write(to: runtimeTraceURL)
-    }
+    appendBoundedRuntimeTrace(data)
+}
+
+func appendFocusedTrace(_ makeLine: @autoclosure () -> String) {
+    guard isRuntimeTraceEnabled else { return }
+    let record = boundedTraceRecord(makeLine())
+#if UNIFYIME_CLI
+    fputs("[trace][focus] \(record)\n", stderr)
+#endif
+    let text = "[\(ISO8601DateFormatter().string(from: Date()))] [focus] \(record)\n"
+    guard let data = text.data(using: .utf8) else { return }
+    appendBoundedRuntimeTrace(data)
 }
 
 @discardableResult

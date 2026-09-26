@@ -4,10 +4,10 @@ import CoreGraphics
 import Darwin
 import Foundation
 
-private let defaultBundleID = "com.vader.inputmethod.UnifyIME"
-private let defaultModeID = "com.vader.inputmethod.UnifyIME.Bopomofo"
-private let defaultSourceID = "com.vader.inputmethod.UnifyIME"
-private let defaultConnectionName = "com.vader.inputmethod.UnifyIME_Connection"
+private let defaultBundleID = "com.vader.inputmethod.XingYunIME"
+private let defaultModeID = "com.vader.inputmethod.XingYunIME.Bopomofo"
+private let defaultSourceID = "com.vader.inputmethod.XingYunIME"
+private let defaultConnectionName = "com.vader.inputmethod.XingYunIME_Connection"
 private let nativeIMKSmokeRequestFileName = "native-imk-smoke-request.json"
 private let nativeIMKSmokeRequestMaxLifetime: TimeInterval = 90
 
@@ -27,6 +27,7 @@ private struct Options {
     let workspaceRootURL: URL
     let smokeRequestURL: URL
     let timeout: TimeInterval
+    let scenario: String
     let dryRun: Bool
 
     init(arguments: [String]) {
@@ -42,7 +43,7 @@ private struct Options {
             }
             if argument == "--report-json" || argument == "--trace-path" || argument == "--app-bundle"
                 || argument == "--mode-id" || argument == "--source-id" || argument == "--workspace-root"
-                || argument == "--timeout",
+                || argument == "--timeout" || argument == "--scenario",
                index + 1 < arguments.count {
                 values[argument] = arguments[index + 1]
                 index += 2
@@ -60,9 +61,10 @@ private struct Options {
         sourceID = values["--source-id"] ?? defaultSourceID
         workspaceRootURL = URL(fileURLWithPath: values["--workspace-root"] ?? environment["UNIFYIME_WORKSPACE_ROOT"] ?? FileManager.default.currentDirectoryPath, isDirectory: true)
         smokeRequestURL = home
-            .appendingPathComponent("Library/Application Support/UnifyIME/temp", isDirectory: true)
+            .appendingPathComponent("Library/Application Support/行雲_繁-A/temp", isDirectory: true)
             .appendingPathComponent(nativeIMKSmokeRequestFileName)
-        timeout = max(5, TimeInterval(values["--timeout"] ?? "30") ?? 30)
+        scenario = values["--scenario"] ?? environment["UNIFYIME_NATIVE_IMK_SCENARIO"] ?? "basic"
+        timeout = max(5, TimeInterval(values["--timeout"] ?? (scenario == "long-text" ? "180" : "30")) ?? 30)
         self.dryRun = dryRun
     }
 }
@@ -103,6 +105,7 @@ private final class SmokeReport {
             "trace_path": options.traceURL.path,
             "trace_request_path": options.smokeRequestURL.path,
             "run_mode": options.dryRun ? "dry_run" : "full",
+            "scenario": options.scenario,
             "diagnosis": diagnosis,
             "checks": checks,
             "manual_unresolved": [
@@ -158,6 +161,14 @@ private struct KeyAction {
     let name: String
     let characters: String
     let keyCode: UInt16
+    let delayAfter: TimeInterval
+
+    init(name: String, characters: String, keyCode: UInt16, delayAfter: TimeInterval = 0.2) {
+        self.name = name
+        self.characters = characters
+        self.keyCode = keyCode
+        self.delayAfter = delayAfter
+    }
 }
 
 private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate {
@@ -182,17 +193,79 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
     private var dispatchedActionCount = 0
     private var actionFailureName: String?
     private var actionFailureMessage: String?
-    private let actions: [KeyAction] = [
-        KeyAction(name: "marked-first-key", characters: "s", keyCode: 1),
-        KeyAction(name: "marked-second-key", characters: "u", keyCode: 32),
-        KeyAction(name: "marked-tone-key", characters: "3", keyCode: 20),
-        KeyAction(name: "commit-enter", characters: "\r", keyCode: 36)
-    ]
+    private var traceHoldObservedBundleIDs: [String: Int] = [:]
+    private var traceHoldTargetObserved = false
+    private let actions: [KeyAction]
     private var actionIndex = 0
     private var deadline = Date.distantFuture
 
     init(options: Options) {
         self.options = options
+        if options.scenario == "long-text" {
+            let configuredDelay = TimeInterval(ProcessInfo.processInfo.environment["UNIFYIME_NATIVE_IMK_KEY_DELAY_SECONDS"] ?? "") ?? 0.03
+            let keyDelay = max(0.03, configuredDelay)
+            let phraseKeys = [
+                KeyAction(name: "", characters: "j", keyCode: 38, delayAfter: keyDelay),
+                KeyAction(name: "", characters: "i", keyCode: 34, delayAfter: keyDelay),
+                KeyAction(name: "", characters: "3", keyCode: 20, delayAfter: keyDelay),
+                KeyAction(name: "", characters: "g", keyCode: 5, delayAfter: keyDelay),
+                KeyAction(name: "", characters: "j", keyCode: 38, delayAfter: keyDelay),
+                KeyAction(name: "", characters: "b", keyCode: 11, delayAfter: keyDelay),
+                KeyAction(name: "", characters: "j", keyCode: 38, delayAfter: keyDelay),
+                KeyAction(name: "", characters: "4", keyCode: 21, delayAfter: keyDelay),
+                KeyAction(name: "", characters: "g", keyCode: 5, delayAfter: keyDelay),
+                KeyAction(name: "", characters: "/", keyCode: 44, delayAfter: keyDelay),
+                KeyAction(name: "", characters: "u", keyCode: 32, delayAfter: keyDelay),
+                KeyAction(name: "", characters: "p", keyCode: 35, delayAfter: keyDelay)
+            ]
+            actions = (0..<48).flatMap { repetition in
+                phraseKeys.enumerated().map { index, key in
+                    KeyAction(
+                        name: "long-\(repetition + 1)-\(index + 1)",
+                        characters: key.characters,
+                        keyCode: key.keyCode,
+                        delayAfter: key.delayAfter
+                    )
+                }
+            } + [KeyAction(name: "voice-space-3", characters: " ", keyCode: 49)]
+        } else if options.scenario == "voice-uninterrupted" {
+            let keys: [(String, UInt16)] = [
+                ("j", 38), ("i", 34), ("3", 20), ("g", 5), ("j", 38), ("b", 11),
+                ("j", 38), ("4", 21), ("g", 5), ("/", 44), ("u", 32), ("p", 35)
+            ]
+            actions = keys.enumerated().map { index, key in
+                KeyAction(name: "uninterrupted-\(index + 1)", characters: key.0, keyCode: key.1, delayAfter: 0.03)
+            } + [
+                KeyAction(name: "voice-space-3", characters: " ", keyCode: 49),
+                KeyAction(name: "commit-enter", characters: "\r", keyCode: 36)
+            ]
+        } else if options.scenario == "voice-boundary" {
+            actions = [
+                KeyAction(name: "voice-wo-w", characters: "j", keyCode: 38),
+                KeyAction(name: "voice-wo-o", characters: "i", keyCode: 34),
+                KeyAction(name: "voice-wo-tone-3", characters: "3", keyCode: 20),
+                KeyAction(name: "voice-shu-sh", characters: "g", keyCode: 5),
+                KeyAction(name: "voice-shu-u", characters: "j", keyCode: 38),
+                KeyAction(name: "voice-space-1", characters: " ", keyCode: 49),
+                KeyAction(name: "voice-ru-r", characters: "b", keyCode: 11),
+                KeyAction(name: "voice-ru-u", characters: "j", keyCode: 38),
+                KeyAction(name: "voice-ru-tone-4", characters: "4", keyCode: 21),
+                KeyAction(name: "voice-sheng-sh", characters: "g", keyCode: 5),
+                KeyAction(name: "voice-sheng-eng", characters: "/", keyCode: 44),
+                KeyAction(name: "voice-space-2", characters: " ", keyCode: 49),
+                KeyAction(name: "voice-yin-y", characters: "u", keyCode: 32),
+                KeyAction(name: "voice-yin-in", characters: "p", keyCode: 35, delayAfter: 1.0),
+                KeyAction(name: "voice-space-3", characters: " ", keyCode: 49),
+                KeyAction(name: "commit-enter", characters: "\r", keyCode: 36)
+            ]
+        } else {
+            actions = [
+                KeyAction(name: "marked-first-key", characters: "s", keyCode: 1),
+                KeyAction(name: "marked-second-key", characters: "u", keyCode: 32),
+                KeyAction(name: "marked-tone-key", characters: "3", keyCode: 20),
+                KeyAction(name: "commit-enter", characters: "\r", keyCode: 36)
+            ]
+        }
         super.init()
         let defaultTraceURL = defaultRuntimeTraceURL()
         traceBaselineOffsets[defaultTraceURL.path] = traceFileSize(at: defaultTraceURL)
@@ -201,6 +274,20 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
     func applicationDidFinishLaunching(_ notification: Notification) {
         deadline = Date().addingTimeInterval(options.timeout)
         NSApp.setActivationPolicy(.regular)
+        let missingResources = missingRequiredBundleResources()
+        guard missingResources.isEmpty else {
+            finish(
+                status: "unresolved",
+                code: 3,
+                name: "native bundle resource preflight",
+                error: "App 缺少必要資源，停止輸入驗收：\(missingResources.joined(separator: ", "))",
+                failureClass: SmokeFailureClass.preconditionNotMet,
+                phase: "preflight",
+                reasonCode: "bundle_resources_missing",
+                evidence: ["missing_resources": missingResources, "actions_dispatched": 0]
+            )
+            return
+        }
         configureTextHost()
         guard !didFinish else { return }
 
@@ -318,6 +405,14 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
     }
 
     private func resetRuntimeTrace() {
+        if options.scenario == "long-text" {
+            report.add(
+                "長句效能模式關閉 runtime trace",
+                status: "pass",
+                details: ["trace_enabled": false, "reason": "avoid measuring verbose log I/O"]
+            )
+            return
+        }
         do {
             let fileManager = FileManager.default
             let defaultTraceURL = defaultRuntimeTraceURL()
@@ -486,36 +581,27 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
     }
 
     private func prepareInputSource() {
-        var mode = findInputMode()
-        var parent = findInputSource()
-        var registerStatus: OSStatus?
-        if mode == nil || parent == nil {
-            registerStatus = TISRegisterInputSource(options.appBundleURL as CFURL)
-            print("[native host] TISRegisterInputSource status=\(registerStatus.map(String.init) ?? "nil")")
-            mode = findInputMode()
-            parent = findInputSource()
-        }
-        guard mode != nil else {
+        guard let mode = findInputMode() else {
             finish(
                 status: "unresolved",
                 code: 3,
                 name: "TIS input mode lookup",
-                error: "註冊 input source 後仍找不到 input mode：\(options.modeID)",
+                error: "唯讀驗收找不到既有 input mode（未嘗試註冊）：\(options.modeID)",
                 failureClass: SmokeFailureClass.preconditionNotMet,
-                phase: "input_source_registration",
-                reasonCode: "input_mode_registration_not_observed"
+                phase: "input_source_precondition",
+                reasonCode: "existing_input_mode_not_observed"
             )
             return
         }
 
-        guard let parent else {
+        guard let parent = findInputSource() else {
             finish(
                 status: "unresolved",
                 code: 3,
                 name: "TIS parent input method lookup",
-                error: "找不到 parent input method：\(options.sourceID)",
+                error: "唯讀驗收找不到既有 parent input method（未嘗試註冊）：\(options.sourceID)",
                 failureClass: SmokeFailureClass.preconditionNotMet,
-                phase: "input_source_registration",
+                phase: "input_source_precondition",
                 reasonCode: "input_method_parent_not_observed",
                 evidence: ["source_id": options.sourceID, "mode_id": options.modeID]
             )
@@ -523,71 +609,46 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         }
 
         let parentWasEnabled = propertyBool(parent, key: kTISPropertyInputSourceIsEnabled) ?? false
-        let parentEnableStatus = parentWasEnabled ? noErr : TISEnableInputSource(parent)
-        let refreshedParent = findInputSource()
-        let parentIsEnabled = refreshedParent.flatMap {
-            propertyBool($0, key: kTISPropertyInputSourceIsEnabled)
-        } ?? false
-        guard parentEnableStatus == noErr, parentIsEnabled else {
+        guard parentWasEnabled else {
             report.add(
-                "啟用 parent input method",
+                "既有 parent input method 已啟用",
                 status: "unresolved",
                 details: [
                     "source_id": options.sourceID,
                     "mode_id": options.modeID,
-                    "was_enabled": parentWasEnabled,
-                    "enable_status": Int(parentEnableStatus),
-                    "enabled_after_request": parentIsEnabled,
-                    "source_details": refreshedParent.map { inputSourceDetails($0) } ?? NSNull()
+                    "enabled": parentWasEnabled,
+                    "enable_attempted": false,
+                    "source_details": inputSourceDetails(parent)
                 ],
-                error: "parent input method 未能在 TIS 狀態中落地"
+                error: "唯讀驗收不會啟用 parent input method"
             )
             finish(
                 status: "unresolved",
                 code: 3,
-                name: "啟用 parent input method",
-                error: "TISEnableInputSource(parent) 失敗或狀態未落地：status=\(parentEnableStatus)",
+                name: "既有 parent input method 已啟用",
+                error: "既有 parent input method 未啟用；未嘗試修改 TIS 狀態",
                 failureClass: SmokeFailureClass.preconditionNotMet,
                 phase: "input_source_selection",
                 reasonCode: "input_method_parent_enable_not_observed",
                 evidence: [
                     "source_id": options.sourceID,
                     "mode_id": options.modeID,
-                    "parent_enable_status": Int(parentEnableStatus),
-                    "parent_enabled": parentIsEnabled,
-                    "parent_details": refreshedParent.map { inputSourceDetails($0) } ?? NSNull(),
+                    "parent_enable_attempted": false,
+                    "parent_enabled": parentWasEnabled,
+                    "parent_details": inputSourceDetails(parent),
                     "process_observation": inputMethodProcessEvidence()
                 ]
             )
             return
         }
 
-        guard let refreshedMode = findInputMode() else {
+        let modeWasEnabled = propertyBool(mode, key: kTISPropertyInputSourceIsEnabled) ?? false
+        guard modeWasEnabled else {
             finish(
                 status: "unresolved",
                 code: 3,
-                name: "TIS input mode refresh",
-                error: "啟用 parent 後重新查找不到 input mode：\(options.modeID)",
-                failureClass: SmokeFailureClass.preconditionNotMet,
-                phase: "input_source_selection",
-                reasonCode: "input_mode_refresh_not_observed",
-                evidence: ["source_id": options.sourceID, "mode_id": options.modeID]
-            )
-            return
-        }
-
-        let modeWasEnabled = propertyBool(refreshedMode, key: kTISPropertyInputSourceIsEnabled) ?? false
-        let modeEnableStatus = modeWasEnabled ? noErr : TISEnableInputSource(refreshedMode)
-        let modeAfter = findInputMode()
-        let modeIsEnabled = modeAfter.flatMap {
-            propertyBool($0, key: kTISPropertyInputSourceIsEnabled)
-        } ?? false
-        guard modeEnableStatus == noErr, modeIsEnabled else {
-            finish(
-                status: "unresolved",
-                code: 3,
-                name: "TIS input mode enable",
-                error: "input mode 未能在 TIS 狀態中落地：status=\(modeEnableStatus)",
+                name: "既有 TIS input mode 已啟用",
+                error: "既有 input mode 未啟用；唯讀驗收未嘗試修改 TIS 狀態",
                 failureClass: SmokeFailureClass.preconditionNotMet,
                 phase: "input_source_selection",
                 reasonCode: "input_mode_enable_not_observed",
@@ -595,9 +656,8 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
                     "source_id": options.sourceID,
                     "mode_id": options.modeID,
                     "mode_was_enabled": modeWasEnabled,
-                    "mode_enable_status": Int(modeEnableStatus),
-                    "mode_enabled": modeIsEnabled,
-                    "mode_details": modeAfter.map { inputSourceDetails($0) } ?? NSNull()
+                    "mode_enable_attempted": false,
+                    "mode_details": inputSourceDetails(mode)
                 ]
             )
             return
@@ -636,7 +696,7 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         inputContext.activate()
         inputContext.selectedKeyboardInputSource = options.modeID
         globalInputSourceSelectionAttempted = true
-        let globalSelectStatus = TISSelectInputSource(refreshedMode)
+        let globalSelectStatus = TISSelectInputSource(mode)
         // TIS selection can synchronously change the active application/context on
         // newer macOS releases. Re-assert the host context-local source only after
         // the system-wide selection request has been made.
@@ -646,7 +706,7 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         let contextSelection = contextInputSourceDetails()
         let globalSelection = currentInputSourceMetadata().dictionary
         report.add(
-            "TIS input mode enable and context-local selection demand-launch request",
+            "existing TIS input mode validation and context-local selection demand-launch request",
             status: globalSelectStatus == noErr
                 && contextSelection["selected_keyboard_input_source"] as? String == options.modeID
                 ? "pass"
@@ -654,11 +714,11 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
             details: [
                 "source_id": options.sourceID,
                 "mode_id": options.modeID,
-                "register_status": registerStatus.map { Int($0) } ?? NSNull(),
-                "parent_enable_status": Int(parentEnableStatus),
-                "parent_enabled": parentIsEnabled,
-                "mode_enable_status": Int(modeEnableStatus),
-                "mode_enabled": modeIsEnabled,
+                "registration_attempted": false,
+                "parent_enable_attempted": false,
+                "parent_enabled": parentWasEnabled,
+                "mode_enable_attempted": false,
+                "mode_enabled": modeWasEnabled,
                 "global_tis_select_attempted": true,
                 "global_tis_select_status": Int(globalSelectStatus),
                 "global_current_input_source": globalSelection,
@@ -737,7 +797,8 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         let contextSelection = contextInputSourceDetails()
         let contextSelected = contextSelection["selected_keyboard_input_source"] as? String == options.modeID
         let globalSelected = current.modeID == options.modeID
-        if contextSelected && currentContextIsHost && globalSelected {
+        let hostActivationReady = isHostActivationReady()
+        if contextSelected && currentContextIsHost && globalSelected && hostActivationReady {
             report.add(
                 "目前 context-local input mode 與 current context 確認",
                 status: "pass",
@@ -751,7 +812,9 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         if attempt >= 100 {
             let processEvidence = inputMethodProcessEvidence()
             let reasonCode: String
-            if !currentContextIsHost {
+            if !hostActivationReady {
+                reasonCode = "host_window_activation_not_observed"
+            } else if !currentContextIsHost {
                 reasonCode = "current_input_context_not_host"
             } else if !contextSelected {
                 reasonCode = "context_local_input_source_selection_not_observed"
@@ -778,6 +841,7 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
                     "current_input_source": current.dictionary,
                     "expected_mode_id": options.modeID,
                     "global_selected": globalSelected,
+                    "host_activation_ready": hostActivationReady,
                     "host_activation": hostActivationDetails(),
                     "context_selection": contextSelection,
                     "process_observation": processEvidence
@@ -819,6 +883,10 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
                     ]
                 ) { _, new in new }
             )
+            if options.scenario == "trace-hold" {
+                beginExternalTraceCaptureWindow()
+                return
+            }
             waitForIMKSessionActivation(attempt: 0)
             return
         }
@@ -845,6 +913,49 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.waitForManagedServer(attempt: attempt + 1)
         }
+    }
+
+    private func beginExternalTraceCaptureWindow() {
+        sampleExternalTraceCaptureWindow(until: Date().addingTimeInterval(25))
+    }
+
+    private func sampleExternalTraceCaptureWindow(until deadline: Date) {
+        guard !didFinish else { return }
+        let targetBundleID = "com.apple.TextEdit"
+        if let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier {
+            if bundleID != Bundle.main.bundleIdentifier {
+                traceHoldObservedBundleIDs[bundleID, default: 0] += 1
+            }
+            if bundleID == targetBundleID { traceHoldTargetObserved = true }
+        }
+        guard Date() >= deadline else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.sampleExternalTraceCaptureWindow(until: deadline)
+            }
+            return
+        }
+        let trace = runtimeTraceSnapshot()
+        let observed = traceHoldTargetObserved
+        finish(
+            status: observed ? "pass" : "unresolved",
+            code: observed ? 0 : 3,
+            name: "external TextEdit trace capture window",
+            error: observed ? nil : "25 秒觀察期間未確認 TextEdit 成為前景 App",
+            failureClass: observed ? SmokeFailureClass.hostHarnessFailure : SmokeFailureClass.preconditionNotMet,
+            phase: "external_trace_capture",
+            reasonCode: observed ? "textedit_foreground_observed" : "textedit_foreground_not_observed",
+            evidence: [
+                "target_bundle_id": targetBundleID,
+                "target_observed_frontmost": observed,
+                "frontmost_observation_counts": traceHoldObservedBundleIDs,
+                "trace_path": options.traceURL.path,
+                "trace_bytes": trace.byteCount,
+                "trace_line_count": trace.text.split(separator: "\n").count,
+                "recognized_events_callback_observed": trace.text.contains("imk.recognizedEvents"),
+                "handle_entry_callback_observed": trace.text.contains("handle.entry"),
+                "set_marked_text_observed": trace.text.contains("setMarkedText.result")
+            ]
+        )
     }
 
     private func waitForIMKSessionActivation(attempt: Int) {
@@ -998,19 +1109,10 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
             return
         }
         let action = actions[actionIndex]
-        guard let event = NSEvent.keyEvent(
-            with: .keyDown,
-            location: .zero,
-            modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber,
-            context: nil,
-            characters: action.characters,
-            charactersIgnoringModifiers: action.characters,
-            isARepeat: false,
-            keyCode: action.keyCode
-        ) else {
-            finish(status: "fail", code: 2, name: action.name, error: "無法建立 NSEvent.keyDown")
+        guard let eventSource = CGEventSource(stateID: .hidSystemState),
+              let keyDown = CGEvent(keyboardEventSource: eventSource, virtualKey: CGKeyCode(action.keyCode), keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: eventSource, virtualKey: CGKeyCode(action.keyCode), keyDown: false) else {
+            finish(status: "fail", code: 2, name: action.name, error: "無法建立 HID 鍵盤事件")
             return
         }
 
@@ -1030,11 +1132,12 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         let traceBefore = runtimeTraceText()
         let dispatchedAt = Date()
         dispatchedActionCount += 1
-        // Use the same AppKit route as a real Cocoa text host. Calling
-        // NSTextInputContext.handleEvent directly bypasses NSTextView.keyDown /
-        // interpretKeyEvents and can leave the event as ordinary text even when
-        // the input source was selected correctly.
-        NSApp.sendEvent(event)
+        // Post through the system HID event tap so macOS routes the key through
+        // the selected InputMethodKit service before delivering it to NSTextView.
+        keyDown.post(tap: .cghidEventTap)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+            keyUp.post(tap: .cghidEventTap)
+        }
         waitForActionResult(
             action: action,
             before: before,
@@ -1058,9 +1161,12 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
             ? String(trace.dropFirst(traceBefore.count))
             : trace
         let handleObserved = traceDelta.contains("imk.handle.entry")
-        let handledByInputMethod = handleObserved
+        let visibleInputUpdated = snapshot.text != before.text || snapshot.markedText != before.markedText
+        let handledByInputMethod = handleObserved || (options.scenario == "long-text" && visibleInputUpdated)
         let candidatePreviewObserved = traceDelta.contains("preview.sync") && traceDelta.contains("candidates=")
-        let commitObserved = traceDelta.contains("commitCurrentComposition.inserted")
+        let expectedCommitText = expectedFinalText
+        let commitObserved = traceDelta.contains("transport.insertText session=")
+            && traceDelta.contains("text=\(expectedCommitText)")
         let satisfied: Bool
         switch action.name {
         case "marked-first-key", "marked-second-key":
@@ -1073,16 +1179,19 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         case "commit-enter":
             satisfied = handledByInputMethod
                 && !snapshot.hasMarkedText
-                && snapshot.text == "你"
+                && snapshot.text == expectedFinalText
                 && commitObserved
+        case "voice-space-1", "voice-space-2", "voice-space-3":
+            satisfied = handledByInputMethod
+                && (snapshot.text != before.text || snapshot.hasMarkedText || commitObserved)
         default:
-            satisfied = false
+            satisfied = handledByInputMethod && snapshot.hasMarkedText && snapshot.markedRange.length > 0
         }
 
         if satisfied {
             var actionDetails = snapshot.dictionary()
             actionDetails["handled_by_input_method"] = handledByInputMethod
-            actionDetails["event_injection_api"] = "NSApp.sendEvent→NSWindow→NSTextView.keyDown"
+            actionDetails["event_injection_api"] = "CGEventPost(kCGHIDEventTap)"
             actionDetails["event_characters"] = action.characters
             actionDetails["event_key_code"] = Int(action.keyCode)
             actionDetails["wait_ms"] = Int(Date().timeIntervalSince(dispatchedAt) * 1000)
@@ -1092,7 +1201,7 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
             report.add(action.name, status: "pass", details: actionDetails)
             actionIndex += 1
             if actionIndex < actions.count {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + action.delayAfter) { [weak self] in
                     self?.sendNextAction()
                 }
             } else {
@@ -1106,7 +1215,8 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         let waitLimit = min(2.5, max(0.5, options.timeout / 3.0))
         let waitExpired = Date().timeIntervalSince(dispatchedAt) >= waitLimit
         if !waitExpired && Date() <= deadline {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            let pollInterval = options.scenario == "long-text" ? 0.01 : 0.05
+            DispatchQueue.main.asyncAfter(deadline: .now() + pollInterval) { [weak self] in
                 self?.waitForActionResult(
                     action: action,
                     before: before,
@@ -1132,7 +1242,7 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         }
         var actionDetails = snapshot.dictionary()
         actionDetails["handled_by_input_method"] = handledByInputMethod
-        actionDetails["event_injection_api"] = "NSApp.sendEvent→NSWindow→NSTextView.keyDown"
+        actionDetails["event_injection_api"] = "CGEventPost(kCGHIDEventTap)"
         actionDetails["event_characters"] = action.characters
         actionDetails["event_key_code"] = Int(action.keyCode)
         actionDetails["wait_ms"] = Int(Date().timeIntervalSince(dispatchedAt) * 1000)
@@ -1145,6 +1255,14 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         actionFailureMessage = error
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             self?.validateTraceAndFinish()
+        }
+    }
+
+    private var expectedFinalText: String {
+        switch options.scenario {
+        case "voice-boundary", "voice-uninterrupted": return "我輸入聲音"
+        case "long-text": return String(repeating: "我輸入聲音", count: 48)
+        default: return "你"
         }
     }
 
@@ -1168,6 +1286,47 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
 
     private func validateTraceAndFinish() {
         guard !didFinish else { return }
+        if options.scenario == "long-text" {
+            let snapshot = textView.map(makeSnapshot)
+            let actionChecks = report.checks.filter {
+                let name = $0["name"] as? String ?? ""
+                return name.hasPrefix("long-") || name == "voice-space-3"
+            }
+            let actionsPassed = actionChecks.count == actions.count
+                && actionChecks.allSatisfy { ($0["status"] as? String) == "pass" }
+            let outputMatches = snapshot?.text == expectedFinalText
+                && snapshot?.markedText == expectedFinalText
+                && snapshot?.hasMarkedText == true
+            let status = actionsPassed && outputMatches ? "pass" : "fail"
+            report.add(
+                "240 字原生長句組字結果",
+                status: status,
+                details: [
+                    "action_count": actionChecks.count,
+                    "expected_action_count": actions.count,
+                    "expected_character_count": expectedFinalText.count,
+                    "actual_character_count": snapshot?.text.count ?? 0,
+                    "output_matches": outputMatches,
+                    "trace_disabled": true
+                ],
+                error: status == "pass" ? nil : "長句逐鍵處理未全數通過或最終提交文字不符"
+            )
+            finish(
+                status: status,
+                code: status == "pass" ? 0 : 2,
+                name: "host smoke",
+                error: nil,
+                failureClass: status == "pass" ? SmokeFailureClass.none : SmokeFailureClass.productBehaviorFailure,
+                phase: "long_text_performance",
+                reasonCode: status == "pass" ? "native_long_text_composition_without_trace" : "native_long_text_mismatch",
+                evidence: [
+                    "actions_dispatched": dispatchedActionCount,
+                    "final_snapshot": snapshot?.dictionary() ?? [:],
+                    "trace_disabled": true
+                ]
+            )
+            return
+        }
         let traceSnapshot = runtimeTraceSnapshot()
         let trace = traceSnapshot.text
         guard !trace.isEmpty else {
@@ -1210,12 +1369,12 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
         let requiredMarkers: [(String, String)] = [
             ("server-ready", "imk.server.ready"),
             ("activate-client", "imk.activate.after"),
-            ("client-is-imk-text-input", "storedIsIMK=true"),
-            ("client-state", "storedState=imkTextInput=yes"),
+            ("callback-is-imk-text-input", "callbackIsIMK=true"),
             ("handle-entry", "imk.handle.entry"),
             ("marked-text-result", "setMarkedText.result"),
             ("candidate-preview", "preview.sync"),
-            ("commit-insert", "commitCurrentComposition.inserted")
+            ("commit-insert", "transport.insertText session="),
+            ("expected-commit-text", "text=\(expectedFinalText)")
         ]
         var missing: [String] = []
         for (name, marker) in requiredMarkers where !trace.contains(marker) {
@@ -1364,15 +1523,21 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
     func runDryRun() -> Int32 {
         let executable = options.appBundleURL.appendingPathComponent("Contents/MacOS/UnifyIME")
         let artifactReady = FileManager.default.isExecutableFile(atPath: executable.path)
+        let missingResources = missingRequiredBundleResources()
+        let resourcesReady = missingResources.isEmpty
         report.add(
-            "native bundle artifact",
-            status: artifactReady ? "pass" : "unresolved",
+            "native bundle artifact and required resources",
+            status: artifactReady && resourcesReady ? "pass" : "unresolved",
             details: [
                 "app_bundle": options.appBundleURL.path,
                 "executable": executable.path,
-                "executable_is_present": artifactReady
+                "executable_is_present": artifactReady,
+                "required_resources_present": resourcesReady,
+                "missing_resources": missingResources
             ],
-            error: artifactReady ? nil : "找不到可執行檔：\(executable.path)"
+            error: !artifactReady
+                ? "找不到可執行檔：\(executable.path)"
+                : (resourcesReady ? nil : "App 缺少必要資源：\(missingResources.joined(separator: ", "))")
         )
 
         let guiDetails = guiSessionDetails()
@@ -1420,6 +1585,7 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
 
         var blockers: [String] = []
         if !artifactReady { blockers.append("build_artifact_missing") }
+        if !resourcesReady { blockers.append("bundle_resources_missing") }
         if !guiReady { blockers.append("gui_session_unavailable") }
         if !inputSourceReady { blockers.append("input_mode_not_registered") }
         if !bundlePathMatchesDeployment { blockers.append("bundle_not_deployed") }
@@ -1449,6 +1615,18 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
             ]
         )
         return resultCode()
+    }
+
+    private func missingRequiredBundleResources() -> [String] {
+        let resourcesURL = options.appBundleURL.appendingPathComponent("Contents/Resources", isDirectory: true)
+        let required = ["lexicon_core.bin", "common_map.tsv", "phrase_map.tsv", "IMEConfig.json"]
+        return required.filter { name in
+            let url = resourcesURL.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: url.path),
+                  let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+                  let size = attributes[.size] as? NSNumber else { return true }
+            return size.intValue <= 0
+        }
     }
 
     private func guiSessionDetails() -> [String: Any] {
@@ -1577,7 +1755,7 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
 
     private func defaultRuntimeTraceURL() -> URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/UnifyIME/temp/unifyime-runtime.log")
+            .appendingPathComponent("Library/Application Support/行雲_繁-A/temp/unifyime-runtime.log")
     }
 
     private func traceFileSize(at url: URL) -> Int {
@@ -1627,7 +1805,7 @@ private final class NativeIMKHostSmokeDelegate: NSObject, NSApplicationDelegate 
     }
 
     private func runtimeTraceText() -> String {
-        runtimeTraceSnapshot().text
+        return runtimeTraceSnapshot().text
     }
 
     private func cleanupSmokeRequest() -> [String: Any] {

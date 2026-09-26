@@ -3,7 +3,7 @@
 {"category": "zh", "sentence": "我看起來已經很穩定了"}
 {"category": "zh", "sentence": "請幫我把這個輸入法調整一下"}
 {"category": "zh", "sentence": "如果有問題就直接把這個輸入法貼給我"}
-{"category": "zh", "sentence": "我改完之後反應速度快很多了"}
+{"category": "zh", "sentence": "我改完之後反應速度快很多了", "row_keys": ["raw:ji3", "raw:e93", "raw:j06", "raw:5", "space", "raw:c.4", "raw:z03", "raw:u/4", "raw:nj4", "raw:2j4", "raw:dj94", "raw:cp3", "raw:2ji", "space", "raw:xk7", "enter"]}
 {"category": "zh", "sentence": "我不要一直卡住"}
 {"category": "zh", "sentence": "試試看這個輸入法現在能不能選到"}
 {"category": "zh", "sentence": "我明天早上要先去公司開會"}
@@ -399,3 +399,8 @@
 {"category": "mix", "sentence": "這個 test 進去"}
 {"category": "mix", "sentence": "這個 test 延後"}
 {"category":"zh","sentence":"找出不合理的地方","expected":"找出不合理的地方","tags":["homophone-boundary","phrase-context","合理的"]}
+{"category":"zh","sentence":"聲音","expected":"聲音","tags":["mixed-boundary","up-yin"]}
+{"category":"zh","sentence":"我輸入聲音","expected":"我輸入聲音","tags":["mixed-boundary","up-yin"],"row_keys":["raw:ji3","raw:gj","space","raw:bj4","raw:g/","space","raw:up","space","enter"]}
+{"category":"zh","sentence":"這個聲音","expected":"這個聲音","tags":["mixed-boundary","up-yin"]}
+{"category":"zh","sentence":"聽到聲音","expected":"聽到聲音","tags":["mixed-boundary","up-yin"]}
+{"category":"zh","sentence":"發出聲音","expected":"發出聲音","tags":["mixed-boundary","up-yin"]}

@@ -1354,9 +1354,12 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
         // 應將空白鍵視為注音一聲（定音）與選字處理，不可強行將其作為英文單字直接送出。
         // 若為 how（ㄘㄟ/ㄊ）、you（ㄗㄟ/ㄧ）等破碎切分序，絕不阻擋英文輸出。
         if includeSeparator {
-            let isSingleSyllable = readings.isEmpty && segmentOverrides.isEmpty
             let pending = currentReading
-            let hasChineseForPending = isSingleSyllable && !pending.isEmpty && !(SessionCtl.traditionalChineseProvider.lexicon.commonCharacterMap[pending] ?? []).isEmpty
+            let hasWholeEnglishOverride = segmentOverrides.values.contains(raw)
+            let hasChineseForPending = !pending.isEmpty
+                && !(SessionCtl.traditionalChineseProvider.lexicon.commonCharacterMap[pending] ?? []).isEmpty
+                && (readings.isEmpty || pending.count > 1)
+                && !hasWholeEnglishOverride
             if hasChineseForPending {
                 return false
             }
@@ -2057,9 +2060,8 @@ final class SessionCtl: IMKInputController, CandidateSelectionHandler {
         }
         guard syllableStarters.contains(scalar) else { return false }
         let currentState = analyzeSyllablePrefix(current)
-        guard currentState.complete else { return false }
         let continuedState = analyzeSyllablePrefix(current + incoming)
-        return !continuedState.possible
+        return !continuedState.possible && currentState.complete
     }
 
     private struct SyllablePrefixState {
@@ -2499,4 +2501,3 @@ extension SessionCtl: IMEStateContext {
         return true
     }
 }
-

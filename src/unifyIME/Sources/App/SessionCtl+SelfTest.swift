@@ -1,5 +1,23 @@
 import Foundation
 
+private struct OverridePhraseEntryCache {
+    struct Entry {
+        let syllables: [String]
+        let reading: String
+        let value: String
+    }
+
+    static let entries: [Entry] = SessionCtl.overrideCharacterMap.compactMap { reading, values in
+        guard let value = values.first else { return nil }
+        let syllables = SessionCtl.splitReadingIntoSyllables(reading)
+        guard syllables.count > 1 else { return nil }
+        return Entry(syllables: syllables, reading: reading, value: value)
+    }.sorted {
+        if $0.syllables.count != $1.syllables.count { return $0.syllables.count > $1.syllables.count }
+        return $0.reading.count > $1.reading.count
+    }
+}
+
 extension SessionCtl {
     struct SelfTestCase {
         let sentence: String
@@ -80,6 +98,52 @@ extension SessionCtl {
         }
         print("總結: \(cases.count - failures)/\(cases.count) 通過")
         return failures == 0 ? 0 : 2
+    }
+
+    static func runReadingWalkIncrementalProbe() -> Int32 {
+        let provider = traditionalChineseProvider
+        let incremental = provider.readingWalker
+        let reference = ReadingWalker(
+            lexicon: provider.lexicon,
+            ranker: incremental.ranker,
+            languageID: provider.languageID
+        )
+        let readings = Array(repeating: ["ㄨㄛˇ", "ㄕㄨ", "ㄖㄨˋ", "ㄕㄥ", "ㄧㄣ"], count: 48).flatMap { $0 }
+        let tokens = readings.map { InputToken(languageID: provider.languageID, rawValue: $0) }
+        var checks = 0
+        func compare(_ input: [InputToken]) -> Bool {
+            checks += 1
+            return incremental.resolveWalk(input) == reference.resolveWalk(input, allowIncrementalReuse: false)
+        }
+        ReadingWalker.resetIncrementalReuseMetrics()
+        for end in 1...tokens.count where !compare(Array(tokens.prefix(end))) {
+            print("FAIL incremental differential at append count=\(end)")
+            return 2
+        }
+        for count in [239, 200, 120, 48, 5] where !compare(Array(tokens.prefix(count))) {
+            print("FAIL incremental differential at suffix count=\(count)")
+            return 2
+        }
+        var edited = Array(tokens.prefix(120))
+        edited[23] = InputToken(languageID: provider.languageID, rawValue: "ㄋㄧˇ")
+        guard compare(edited) else {
+            print("FAIL incremental differential at middle edit")
+            return 2
+        }
+        edited[23] = tokens[23]
+        guard compare(edited) else {
+            print("FAIL incremental differential after edit restore")
+            return 2
+        }
+        edited[24] = InputToken(languageID: "en", rawValue: tokens[24].rawValue)
+        guard compare(edited) else {
+            print("FAIL incremental differential at language change")
+            return 2
+        }
+        let metrics = ReadingWalker.incrementalReuseMetrics()
+        let exercised = metrics.earlyStops > 0 && metrics.reusedRows > 0
+        print("reading-walk incremental differential: \(checks)/\(checks) exact; earlyStops=\(metrics.earlyStops), reusedRows=\(metrics.reusedRows)")
+        return exercised ? 0 : 2
     }
 
     static func defaultSelfTestCases() -> [SelfTestCase] {
@@ -191,12 +255,16 @@ extension SessionCtl {
         return best[0]?.segments
     }
 
-    static func inverseBopomofoMap() -> [String: String] {
+    private static let cachedInverseBopomofoMap: [String: String] = {
         var inverse: [String: String] = [:]
         for (key, value) in bopomofoMap where inverse[value] == nil {
             inverse[value] = key
         }
         return inverse
+    }()
+
+    static func inverseBopomofoMap() -> [String: String] {
+        cachedInverseBopomofoMap
     }
 
     static func keySequence(for readings: [String]) -> String {
@@ -263,20 +331,12 @@ extension SessionCtl {
 
     static func overridePhraseLockedMap(for allReadings: [String]) -> [Int: ComposedSegment] {
         guard !allReadings.isEmpty else { return [:] }
-        let phraseEntries: [(syllables: [String], reading: String, value: String)] = overrideCharacterMap.compactMap { reading, values in
-            guard let value = values.first else { return nil }
-            let syllables = splitReadingIntoSyllables(reading)
-            guard syllables.count > 1 else { return nil }
-            return (syllables, reading, value)
-        }.sorted {
-            if $0.syllables.count != $1.syllables.count { return $0.syllables.count > $1.syllables.count }
-            return $0.reading.count > $1.reading.count
-        }
 
+        let phraseEntries = OverridePhraseEntryCache.entries
         var locked: [Int: ComposedSegment] = [:]
         var index = 0
         while index < allReadings.count {
-            var matched: (syllables: [String], reading: String, value: String)?
+            var matched: OverridePhraseEntryCache.Entry?
             for entry in phraseEntries {
                 let end = index + entry.syllables.count
                 guard end <= allReadings.count else { continue }

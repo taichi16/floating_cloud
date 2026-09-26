@@ -76,28 +76,6 @@ else
   SWIFT_FLAGS+=(-O)
 fi
 
-remove_stale_input_methods() {
-  local app current_id app_id app_name display_name
-  current_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_DIR/Contents/Info.plist" 2>/dev/null || true)"
-  [[ -d "$INPUT_METHODS_DIR" ]] || return 0
-
-  while IFS= read -r -d '' app; do
-    [[ "$app" == "$INSTALL_DIR" ]] && continue
-    app_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist" 2>/dev/null || true)"
-    app_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$app/Contents/Info.plist" 2>/dev/null || true)"
-    display_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app/Contents/Info.plist" 2>/dev/null || true)"
-
-    # 嚴格保護「全一輸入法」與「全一_繁-A」，只清理「行雲_繁-A」自身的歷史遺留
-    if [[ -n "$current_id" && -n "$app_id" && "$app_id" == "$current_id" ]] \
-      || [[ "$app_name" == *"行雲_繁-A"* ]] \
-      || [[ "$display_name" == *"行雲_繁-A"* ]]; then
-      echo "Removing stale input method:"
-      echo "  $app"
-      rm -rf "$app"
-    fi
-  done < <(find "$INPUT_METHODS_DIR" -maxdepth 1 -type d -name '*.app' -print0)
-}
-
 copy_tree_if_exists() {
   local src="$1"
   local dst="$2"
@@ -205,74 +183,38 @@ echo "Swift configuration: $SWIFT_CONFIGURATION"
 if [[ "$DEPLOY_MODE" == "1" && "${UNIFYIME_SKIP_DEPLOY:-${FASTCHIME_SKIP_DEPLOY:-0}}" != "1" ]]; then
   echo "Deploying to:"
   echo "  $INSTALL_DIR"
-  remove_stale_input_methods
-  rm -rf "$INSTALL_DIR"
-  ditto "$APP_DIR" "$INSTALL_DIR"
-  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$APP_DIR" 2>/dev/null || true
+  mkdir -p "$INPUT_METHODS_DIR"
+  STAGING="$INPUT_METHODS_DIR/.xingyun-install-$$"
+  BACKUP=""
+  rollback_deploy() {
+    local status=$?
+    if (( status != 0 )); then
+      if [[ -n "$BACKUP" && -d "$BACKUP/previous" ]]; then
+        rm -rf "$INSTALL_DIR"
+        mv "$BACKUP/previous" "$INSTALL_DIR"
+      elif [[ -z "$BACKUP" && -d "$INSTALL_DIR" ]]; then
+        rm -rf "$INSTALL_DIR"
+      fi
+    fi
+    [[ ! -d "$STAGING" ]] || rm -rf "$STAGING"
+    [[ -z "$BACKUP" || ! -d "$BACKUP" ]] || rmdir "$BACKUP" 2>/dev/null || true
+  }
+  trap rollback_deploy EXIT
+  rm -rf "$STAGING"
+  ditto "$APP_DIR" "$STAGING"
+  codesign --verify --deep --strict "$STAGING"
+  if [[ -d "$INSTALL_DIR" ]]; then
+    BACKUP="$(mktemp -d "$INPUT_METHODS_DIR/.xingyun-backup.XXXXXX")"
+    mv "$INSTALL_DIR" "$BACKUP/previous"
+  fi
+  mv "$STAGING" "$INSTALL_DIR"
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$INSTALL_DIR"
-  killall -9 imklaunchagent TextInputMenuAgent TextInputSwitcher UnifyIME >/dev/null 2>&1 || true
-  killall cfprefsd >/dev/null 2>&1 || true
-  pkill -f "$INSTALL_DIR/Contents/MacOS/UnifyIME" >/dev/null 2>&1 || true
-
-  # 註冊至 TIS 與偏好設定，並啟動輸入法常駐進程
-  swift -e '
-  import Foundation
-  import CoreFoundation
-  import Carbon
-
-  let hitDomain = "com.apple.HIToolbox" as CFString
-  let hitKey = "AppleEnabledInputSources" as CFString
-  if let currentVal = CFPreferencesCopyAppValue(hitKey, hitDomain) as? [[String: Any]] {
-      let targetItem: [String: Any] = [
-          "Bundle ID": "com.vader.inputmethod.XingYunIME",
-          "Input Mode": "com.vader.inputmethod.XingYunIME.Bopomofo",
-          "InputSourceKind": "Input Mode"
-      ]
-      var filtered = currentVal.filter { item in
-          guard let b = item["Bundle ID"] as? String else { return true }
-          return !b.contains("XingYunIME")
-      }
-      filtered.append(targetItem)
-      CFPreferencesSetAppValue(hitKey, filtered as CFArray, hitDomain)
-      CFPreferencesSynchronize(hitDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
-  }
-
-  let inputDomain = "com.apple.inputsources" as CFString
-  let thirdPartyKey = "AppleEnabledThirdPartyInputSources" as CFString
-  if let currentVal = CFPreferencesCopyAppValue(thirdPartyKey, inputDomain) as? [[String: Any]] {
-      let targetItem: [String: Any] = [
-          "Bundle ID": "com.vader.inputmethod.XingYunIME",
-          "InputSourceKind": "Keyboard Input Method"
-      ]
-      var filtered = currentVal.filter { item in
-          guard let b = item["Bundle ID"] as? String else { return true }
-          return !b.contains("XingYunIME")
-      }
-      filtered.append(targetItem)
-      CFPreferencesSetAppValue(thirdPartyKey, filtered as CFArray, inputDomain)
-      CFPreferencesSynchronize(inputDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
-  }
-
-  if let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource] {
-      var bopomofoSources: [TISInputSource] = []
-      for s in list {
-          let idPtr = TISGetInputSourceProperty(s, kTISPropertyInputSourceID)
-          let id = idPtr != nil ? (Unmanaged<CFString>.fromOpaque(idPtr!).takeUnretainedValue() as String) : ""
-          if id == "com.vader.inputmethod.XingYunIME.Bopomofo" {
-              bopomofoSources.append(s)
-          } else if id == "com.vader.inputmethod.XingYunIME" {
-              TISDisableInputSource(s)
-          }
-      }
-      if let latest = bopomofoSources.last {
-          for old in bopomofoSources.dropLast() {
-              TISDisableInputSource(old)
-          }
-          TISEnableInputSource(latest)
-          TISSelectInputSource(latest)
-      }
-  }
-  '
+  "$INSTALL_DIR/Contents/MacOS/$MODULE_NAME" install
+  if [[ -n "$BACKUP" ]]; then
+    rm -rf "$BACKUP"
+    BACKUP=""
+  fi
+  trap - EXIT
 
   open "$INSTALL_DIR" 2>/dev/null || true
   echo "Deployed and launched:"

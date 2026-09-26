@@ -1,10 +1,23 @@
 import Foundation
+import Darwin
 
 /// 負責載入與監聽使用者個人自訂中文詞庫（免重新編譯、存檔即生效）
 public enum UserCustomPhraseStore {
+    private struct FileSignature: Equatable {
+        let modificationSeconds: Int64
+        let modificationNanoseconds: Int64
+        let size: Int64
+
+        init(_ info: stat) {
+            modificationSeconds = Int64(info.st_mtimespec.tv_sec)
+            modificationNanoseconds = Int64(info.st_mtimespec.tv_nsec)
+            size = Int64(info.st_size)
+        }
+    }
+
     private static let lock = NSLock()
     private static var cachedPhrases: [String: [String]] = [:] // reading -> [phrase]
-    private static var lastModificationDate: Date?
+    private static var lastFileSignature: FileSignature?
 
     private static var customDirectory: URL {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -38,14 +51,21 @@ public enum UserCustomPhraseStore {
         lock.lock()
         defer { lock.unlock() }
 
-        ensureFileExists()
         let path = customFileUrl.path
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-              let modDate = attrs[.modificationDate] as? Date else {
+        func currentSignature() -> FileSignature? {
+            path.withCString { pathPointer -> FileSignature? in
+                var info = stat()
+                guard lstat(pathPointer, &info) == 0 else { return nil }
+                return FileSignature(info)
+            }
+        }
+        ensureFileExists()
+        let signature = currentSignature()
+        guard let signature else {
             return
         }
 
-        if let last = lastModificationDate, last == modDate {
+        if let last = lastFileSignature, last == signature {
             return
         }
 
@@ -80,7 +100,7 @@ public enum UserCustomPhraseStore {
         }
 
         cachedPhrases = newPhrases
-        lastModificationDate = modDate
+        lastFileSignature = signature
     }
 
     /// 查詢自訂詞彙
@@ -89,5 +109,13 @@ public enum UserCustomPhraseStore {
         lock.lock()
         defer { lock.unlock() }
         return cachedPhrases[reading] ?? []
+    }
+
+    /// 在同一次 reload 檢查後，查詢多個讀音是否有自訂詞，供布林證據判斷使用。
+    public static func hasAnyPhrases(for readings: [String]) -> Bool {
+        reloadIfNeeded()
+        lock.lock()
+        defer { lock.unlock() }
+        return readings.contains { !(cachedPhrases[$0] ?? []).isEmpty }
     }
 }

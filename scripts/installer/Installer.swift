@@ -68,23 +68,21 @@ enum Installation {
         do {
             try fm.moveItem(at: incoming, to: destination)
             try run(registrar, ["-f", destination.path])
-            _ = try? run("/usr/bin/killall", ["UnifyIME"])
-            _ = try? run("/usr/bin/killall", ["TextInputMenuAgent"])
-            _ = try? run("/usr/bin/killall", ["TextInputSwitcher"])
             let binary = destination.appendingPathComponent("Contents/MacOS/UnifyIME")
-            if fm.isExecutableFile(atPath: binary.path) {
-                _ = try? run(binary.path, ["install"])
+            guard fm.isExecutableFile(atPath: binary.path) else {
+                throw NSError(domain: "FloatingCloudInstaller", code: 4,
+                    userInfo: [NSLocalizedDescriptionKey: "安裝檔缺少可執行程式。"])
             }
+            _ = try run(binary.path, ["install"])
             try launch(destination)
         } catch {
             let installError = error
             do {
-                _ = try? run("/usr/bin/killall", ["UnifyIME"])
                 if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
                 if existed {
                     try fm.moveItem(at: backup, to: destination)
-                    _ = try? run(registrar, ["-f", destination.path])
-                    try? launch(destination)
+                    try run(registrar, ["-f", destination.path])
+                    try launch(destination)
                 }
             } catch {
                 keepBackup = true
@@ -104,7 +102,7 @@ final class InstallerDelegate: NSObject, NSApplicationDelegate {
             styleMask: [.titled], backing: .buffered, defer: false)
         window.title = "安裝 行雲_繁-A"
         window.center()
-        let label = NSTextField(wrappingLabelWithString: "正在安裝 行雲_繁-A…\n更新時會自動備份並重新啟動輸入法。")
+        let label = NSTextField(wrappingLabelWithString: "正在安裝 行雲_繁-A…\n更新時會暫存舊版，失敗時嘗試回復。")
         label.frame = NSRect(x: 30, y: 75, width: 380, height: 60)
         let spinner = NSProgressIndicator(frame: NSRect(x: 30, y: 35, width: 380, height: 20))
         spinner.style = .bar

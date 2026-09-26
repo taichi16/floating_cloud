@@ -42,11 +42,6 @@ fi
 
 echo "📦 應用程式來源: $SOURCE_APP"
 
-# 確保過去掛載的安裝磁碟已卸載，防止 LaunchServices 索引多餘副本
-hdiutil info | grep -B 1 -A 5 "行雲" | grep "/dev/disk" | awk '{print $1}' | while read dev; do
-    diskutil eject force "$dev" 2>/dev/null || hdiutil detach "$dev" -force 2>/dev/null || true
-done
-
 # 2. 準備打包暫存目錄
 echo "📂 正在配置 DMG 映像檔內容結構..."
 rm -rf "$BUILD_DIR"
@@ -58,9 +53,6 @@ ditto "$SOURCE_APP" "$BUILD_DIR/$APP_NAME"
 ditto "$DIR/安裝行雲_繁-A.command" "$BUILD_DIR/安裝行雲_繁-A.command"
 ditto "$DIR/反安裝行雲_繁-A.command" "$BUILD_DIR/反安裝行雲_繁-A.command"
 
-# 建立 Input Methods 系統目錄替身連結
-ln -s "/Library/Input Methods" "$BUILD_DIR/Input Methods (全系統輸入法目錄)"
-
 # 建立說明文件
 cat << 'README_EOF' > "$BUILD_DIR/使用說明.txt"
 ==========================================
@@ -70,19 +62,18 @@ cat << 'README_EOF' > "$BUILD_DIR/使用說明.txt"
 【一鍵安裝】
 直接雙擊本映像檔視窗中的「安裝行雲_繁-A.command」：
 ✓ 自動安裝至個人輸入法目錄 (~/Library/Input Methods)
-✓ 自動完成本機代碼簽名與路徑註冊
+✓ 驗證來源簽章並註冊使用者安裝路徑
 ✓ 自動啟用輸入法並嘗試切換使用
-✓ 若有舊版本會自動覆蓋更新檔案
+✓ 更新時暫存舊版，若部署／註冊失敗則回復 App 檔案
 
 【一鍵移除（解除安裝）】
 直接雙擊本映像檔視窗中的「反安裝行雲_繁-A.command」：
 ✓ 移除前自動嘗試切換輸入來源，降低程序鎖定風險
-✓ 結束常駐背景程序並移除應用程式本體檔案
-✓ 若 macOS「系統設定」文字輸入方式面板中仍保留歷史項目，點選後按「-」號即可完成移除。
+✓ 僅移除目前使用者安裝的 App 路徑與本產品來源設定
+✓ 不終止共用輸入服務；其他位置的副本不在移除範圍
 
-【手動安裝】
-亦可將「行雲_繁-A.app」手動拖曳至「Input Methods (全系統輸入法目錄)」，
-然後於「系統設定」>「鍵盤」>「文字輸入方式」新增即可。
+【安裝範圍】
+本安裝器僅支援目前使用者的輸入法目錄；不提供全系統手動安裝。
 README_EOF
 
 # 設定 DMG 自訂磁碟外觀圖標
@@ -127,12 +118,6 @@ if [[ -f "$DMG_ICON" && -f "$OUTPUT_DMG" ]]; then
     NSWorkspace.shared.setIcon(icon, forFile: args[2], options: [])
     ' "$DMG_ICON" "$OUTPUT_DMG" 2>/dev/null || true
 fi
-
-# 移除 dist/ 中裸露的 .app，只保留 .dmg，防止 macOS LaunchServices 重複掃描
-# 注意：必須先呼叫 lsregister -u 註銷路徑，再執行 rm -rf，避免系統註冊表殘留幽靈記錄
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$DIST_APP" 2>/dev/null || true
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$BIN_APP" 2>/dev/null || true
-rm -rf "$DIST_APP" 2>/dev/null || true
 
 echo
 

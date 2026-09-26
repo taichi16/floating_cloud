@@ -41,103 +41,93 @@ echo "📦 來源: $SRC_APP"
 echo "📂 目標: $TARGET"
 echo
 
-# 1. 結束執行中進程並清理舊版
-killall UnifyIME 2>/dev/null || true
+# 僅接受本產品 bundle，並驗證來源簽章；不清理其他同 ID 副本或全域資料庫。
+SOURCE_BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$SRC_APP/Contents/Info.plist")
+if [[ "$SOURCE_BUNDLE_ID" != "com.vader.inputmethod.XingYunIME" ]]; then
+    echo "❌ 來源 Bundle ID 不符：$SOURCE_BUNDLE_ID"
+    exit 1
+fi
+if ! codesign --verify --deep --strict "$SRC_APP"; then
+    echo "❌ 來源簽章驗證失敗，未安裝。"
+    exit 1
+fi
 
 # 檢查是否有已掛載的安裝磁碟，若有則提醒使用者
 if hdiutil info 2>/dev/null | grep -q "行雲_繁-A 安裝磁碟"; then
     echo "💡 提示：偵測到「行雲_繁-A 安裝磁碟」掛載中。建議安裝完成後手動推出安裝映像檔，避免系統快取多餘副本。"
 fi
 
-rm -rf "$TARGET"
-mkdir -p "$HOME/Library/Input Methods"
+mkdir -p "${TARGET:h}"
+STAGING="${TARGET:h}/.xingyun-install-$$"
+BACKUP=""
+INSTALL_STARTED=0
+rollback_install() {
+    local install_exit_code=$?
+    if (( install_exit_code != 0 )); then
+        if [[ -n "$BACKUP" && -d "$BACKUP/previous" ]]; then
+            rm -rf "$TARGET"
+            mv "$BACKUP/previous" "$TARGET"
+        elif [[ -z "$BACKUP" && "$INSTALL_STARTED" == 0 && -d "$TARGET" ]]; then
+            rm -rf "$TARGET"
+        elif [[ -z "$BACKUP" && "$INSTALL_STARTED" == 1 ]]; then
+            echo "⚠️ 安裝流程失敗；已保留開始註冊的 App，避免刪除系統正在引用的輸入法。請檢查上方錯誤與目前輸入來源狀態。" >&2
+        fi
+    fi
+    [[ ! -d "$STAGING" ]] || rm -rf "$STAGING"
+    [[ -z "$BACKUP" || ! -d "$BACKUP" ]] || rmdir "$BACKUP" 2>/dev/null || true
+}
+trap rollback_install EXIT
+rm -rf "$STAGING"
 
 # 2. 部署應用程式
-ditto "$SRC_APP" "$TARGET"
-ENTITLEMENTS="$DIR/src/unifyIME/Resources/fastChIME.entitlements"
-if [[ -f "$ENTITLEMENTS" ]]; then
-    codesign --force --sign - --timestamp=none --entitlements "$ENTITLEMENTS" "$TARGET" 2>/dev/null || true
-else
-    codesign --force --sign - --timestamp=none "$TARGET" 2>/dev/null || true
+ditto "$SRC_APP" "$STAGING"
+codesign --verify --deep --strict "$STAGING"
+if [[ -d "$TARGET" ]]; then
+    BACKUP="$(mktemp -d "${TARGET:h}/.xingyun-backup.XXXXXX")"
+    mv "$TARGET" "$BACKUP/previous"
 fi
+mv "$STAGING" "$TARGET"
 
 # 3. 向 macOS LaunchServices 核心註冊正式路徑並整理資料庫
 if [[ -x "$LSREGISTER" ]]; then
-    $LSREGISTER -f "$TARGET"
-    $LSREGISTER -gc 2>/dev/null || true
+    "$LSREGISTER" -f "$TARGET"
 fi
 
-# 4. 精準寫入 AppleEnabledInputSources 並透過 TIS 啟用（排他性單一啟用，杜絕重複）
-swift -e '
-import Foundation
-import CoreFoundation
-import Carbon
+# 4. 由 App 內唯一的 install 流程重新查詢、啟用並持久化 TIS／HIToolbox 狀態。
+INSTALL_BINARY="$TARGET/Contents/MacOS/UnifyIME"
+if [[ ! -x "$INSTALL_BINARY" ]]; then
+    echo "❌ 安裝檔缺少可執行檔：$INSTALL_BINARY"
+    exit 1
+fi
+INSTALL_STARTED=1
+INSTALL_ATTEMPT=1
+INSTALL_MAX_ATTEMPTS=3
+INSTALL_LOG="$(mktemp "${TMPDIR:-/tmp}/xingyun-install-attempt.XXXXXX")"
+while true; do
+    if "$INSTALL_BINARY" install >"$INSTALL_LOG" 2>&1; then
+        cat "$INSTALL_LOG"
+        break
+    else
+        INSTALL_EXIT_CODE=$?
+        cat "$INSTALL_LOG"
+        if (( INSTALL_ATTEMPT >= INSTALL_MAX_ATTEMPTS )) || ! /usr/bin/grep -Fq "TIS install readiness timeout" "$INSTALL_LOG"; then
+            rm -f "$INSTALL_LOG"
+            exit "$INSTALL_EXIT_CODE"
+        fi
+        echo "⚠️ TIS 尚未完成狀態同步；2 秒後重試安裝（$((INSTALL_ATTEMPT + 1))/$INSTALL_MAX_ATTEMPTS）。"
+        (( INSTALL_ATTEMPT += 1 ))
+        sleep 2
+    fi
+done
+rm -f "$INSTALL_LOG"
+if [[ -n "$BACKUP" ]]; then
+    rm -rf "$BACKUP"
+    BACKUP=""
+fi
+trap - EXIT
 
-let targetBundleID = "com.vader.inputmethod.XingYunIME"
-let targetModeID = "com.vader.inputmethod.XingYunIME.Bopomofo"
-
-// 4.1 清理 com.apple.inputsources (AppleEnabledThirdPartyInputSources 精確比對只留一筆)
-let inputDomain = "com.apple.inputsources" as CFString
-let thirdPartyKey = "AppleEnabledThirdPartyInputSources" as CFString
-if let currentVal = CFPreferencesCopyAppValue(thirdPartyKey, inputDomain) as? [[String: Any]] {
-    var filtered = currentVal.filter { item in
-        guard let b = item["Bundle ID"] as? String else { return true }
-        return b != targetBundleID
-    }
-    filtered.append([
-        "Bundle ID": targetBundleID,
-        "InputSourceKind": "Keyboard Input Method"
-    ])
-    CFPreferencesSetAppValue(thirdPartyKey, filtered as CFArray, inputDomain)
-    CFPreferencesSynchronize(inputDomain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
-}
-
-// 4.2 清理 com.apple.HIToolbox (AppleEnabledInputSources 精確比對只留一筆唯一的 Bopomofo Input Mode)
-let domain = "com.apple.HIToolbox" as CFString
-let key = "AppleEnabledInputSources" as CFString
-if let currentVal = CFPreferencesCopyAppValue(key, domain) as? [[String: Any]] {
-    var filtered = currentVal.filter { item in
-        guard let b = item["Bundle ID"] as? String else { return true }
-        return b != targetBundleID
-    }
-    filtered.append([
-        "Bundle ID": targetBundleID,
-        "Input Mode": targetModeID,
-        "InputSourceKind": "Input Mode"
-    ])
-    CFPreferencesSetAppValue(key, filtered as CFArray, domain)
-    CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
-}
-
-// 4.3 透過 TIS 啟用唯一的最新 Bopomofo mode，並強制停用所有重複或過時句柄
-if let list = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource] {
-    var bopomofoSources: [TISInputSource] = []
-    for s in list {
-        let idPtr = TISGetInputSourceProperty(s, kTISPropertyInputSourceID)
-        let id = idPtr != nil ? (Unmanaged<CFString>.fromOpaque(idPtr!).takeUnretainedValue() as String) : ""
-        if id == targetModeID {
-            bopomofoSources.append(s)
-        } else if id == targetBundleID {
-            TISDisableInputSource(s)
-        }
-    }
-    if let primary = bopomofoSources.last {
-        for old in bopomofoSources.dropLast() {
-            TISDisableInputSource(old)
-        }
-        let isEnabledPtr = TISGetInputSourceProperty(primary, kTISPropertyInputSourceIsEnabled)
-        let isEnabled = isEnabledPtr != nil ? CFBooleanGetValue(Unmanaged<CFBoolean>.fromOpaque(isEnabledPtr!).takeUnretainedValue()) : false
-        if !isEnabled {
-            TISEnableInputSource(primary)
-        }
-        TISSelectInputSource(primary)
-    }
-}
-'
-
-# 5. 啟動 App 並重整選單列
+# 5. 開啟 App；不強制終止共用輸入法服務。
 open "$TARGET" 2>/dev/null || true
-killall -9 imklaunchagent TextInputMenuAgent TextInputSwitcher 2>/dev/null || true
 
 echo "=========================================="
 echo "        🎉 行雲_繁-A 安裝完成！"

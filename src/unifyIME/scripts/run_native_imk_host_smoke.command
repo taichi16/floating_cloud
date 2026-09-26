@@ -7,10 +7,14 @@ REPORT_PATH="${1:?請提供 native host smoke JSON 報告路徑}"
 TRACE_PATH="${2:?請提供 native host smoke trace 路徑}"
 APP_BUNDLE="${3:-$HOME/Library/Input Methods/行雲_繁-A.app}"
 DRY_RUN=0
+SCENARIO="${UNIFYIME_NATIVE_IMK_SCENARIO:-basic}"
 for arg in "$@"; do
   case "$arg" in
     --dry-run)
       DRY_RUN=1
+      ;;
+    --scenario=*)
+      SCENARIO="${arg#--scenario=}"
       ;;
   esac
 done
@@ -48,16 +52,23 @@ HOST_ARGS=(
   --trace-path "$TRACE_PATH"
   --app-bundle "$APP_BUNDLE"
   --workspace-root "$WORKSPACE_ROOT"
+  --scenario "$SCENARIO"
 )
 if (( DRY_RUN == 1 )); then
   HOST_ARGS+=(--dry-run)
 fi
 
 set +e
-UNIFYIME_WORKSPACE_ROOT="$WORKSPACE_ROOT" \
-UNIFYIME_RUNTIME_TRACE_ENABLED=1 \
-UNIFYIME_RUNTIME_TRACE="$TRACE_PATH" \
-  "$HOST_BIN" "${HOST_ARGS[@]}"
+if [[ "$SCENARIO" == "long-text" ]]; then
+  UNIFYIME_WORKSPACE_ROOT="$WORKSPACE_ROOT" \
+  UNIFYIME_RUNTIME_TRACE="$TRACE_PATH" \
+    "$HOST_BIN" "${HOST_ARGS[@]}"
+else
+  UNIFYIME_WORKSPACE_ROOT="$WORKSPACE_ROOT" \
+  UNIFYIME_RUNTIME_TRACE_ENABLED=1 \
+  UNIFYIME_RUNTIME_TRACE="$TRACE_PATH" \
+    "$HOST_BIN" "${HOST_ARGS[@]}"
+fi
 EXIT_CODE=$?
 set -e
 exit "$EXIT_CODE"

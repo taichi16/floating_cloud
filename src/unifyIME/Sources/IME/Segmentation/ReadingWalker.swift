@@ -1,6 +1,44 @@
 import Foundation
 
 struct ReadingWalker {
+    private struct WalkChoice: Equatable {
+        let score: Double
+        let segment: ComposedSegment
+        let nextIndex: Int
+    }
+
+    private struct WalkCacheKey: Hashable {
+        let scope: String
+        let languageID: String
+        let lexiconVersion: String
+        let userFrequencyRevision: UInt64
+        let candidateMode: String
+        let candidateModelLoaded: Bool
+        let listwiseModelLoaded: Bool
+        let tokens: [String]
+    }
+
+    private struct IncrementalWalkState {
+        let key: WalkCacheKey
+        let tokens: [InputToken]
+        let best: [WalkChoice?]
+    }
+
+    struct IncrementalReuseMetrics {
+        let appendCalls: Int
+        let earlyStops: Int
+        let reusedRows: Int
+    }
+
+    private static let walkCacheCapacity = 16
+    private static let walkCacheLock = NSLock()
+    private static var walkCache: [WalkCacheKey: [ComposedSegment]] = [:]
+    private static var walkCacheOrder: [WalkCacheKey] = []
+    private static var incrementalStates: [String: IncrementalWalkState] = [:]
+    private static var incrementalStateOrder: [String] = []
+    private static var incrementalAppendCalls = 0
+    private static var incrementalEarlyStops = 0
+    private static var incrementalRowsReused = 0
     private static let phraseStats = LexiconStore.loadPhraseContextStats()
     // 常見功能字不能被同音名詞或偶然雙字詞完全壓過；分數只在
     // 該字位於詞組邊界且仍有左右上下文時啟用。
@@ -13,6 +51,62 @@ struct ReadingWalker {
     let lexicon: LexiconStore
     let ranker: UnifiedCandidateRanker
     let languageID: String
+    private let cacheScope = UUID().uuidString
+
+    private static func cachedWalk(for key: WalkCacheKey) -> [ComposedSegment]? {
+        walkCacheLock.lock()
+        defer { walkCacheLock.unlock() }
+        guard let cached = walkCache[key] else { return nil }
+        walkCacheOrder.removeAll { $0 == key }
+        walkCacheOrder.append(key)
+        return cached
+    }
+
+    private static func storeWalk(_ result: [ComposedSegment], for key: WalkCacheKey) {
+        walkCacheLock.lock()
+        defer { walkCacheLock.unlock() }
+        walkCache[key] = result
+        walkCacheOrder.removeAll { $0 == key }
+        walkCacheOrder.append(key)
+        while walkCacheOrder.count > walkCacheCapacity {
+            walkCache.removeValue(forKey: walkCacheOrder.removeFirst())
+        }
+    }
+
+    private static func incrementalState(for scope: String) -> IncrementalWalkState? {
+        walkCacheLock.lock()
+        defer { walkCacheLock.unlock() }
+        return incrementalStates[scope]
+    }
+
+    private static func storeIncrementalState(_ state: IncrementalWalkState, for scope: String) {
+        walkCacheLock.lock()
+        defer { walkCacheLock.unlock() }
+        incrementalStates[scope] = state
+        incrementalStateOrder.removeAll { $0 == scope }
+        incrementalStateOrder.append(scope)
+        while incrementalStateOrder.count > walkCacheCapacity {
+            incrementalStates.removeValue(forKey: incrementalStateOrder.removeFirst())
+        }
+    }
+
+    static func resetIncrementalReuseMetrics() {
+        walkCacheLock.lock()
+        incrementalAppendCalls = 0
+        incrementalEarlyStops = 0
+        incrementalRowsReused = 0
+        walkCacheLock.unlock()
+    }
+
+    static func incrementalReuseMetrics() -> IncrementalReuseMetrics {
+        walkCacheLock.lock()
+        defer { walkCacheLock.unlock() }
+        return IncrementalReuseMetrics(
+            appendCalls: incrementalAppendCalls,
+            earlyStops: incrementalEarlyStops,
+            reusedRows: incrementalRowsReused
+        )
+    }
 
     private func rawLength(for reading: String) -> Int {
         if languageID == "zh-Hant" {
@@ -22,26 +116,61 @@ struct ReadingWalker {
         return max(1, reading.count)
     }
 
-    func resolveWalk(_ tokens: [InputToken]) -> [ComposedSegment] {
+    func resolveWalk(_ tokens: [InputToken], allowIncrementalReuse: Bool = true) -> [ComposedSegment] {
         profileRuntime("readingWalker.resolveWalk", details: "tokens=\(tokens.count)") {
             let readings = tokens.map(\.rawValue)
             guard !readings.isEmpty else { return [] }
-
-            struct WalkChoice {
-                let score: Double
-                let segment: ComposedSegment
-                let nextIndex: Int
+            let cacheKey = WalkCacheKey(
+                scope: cacheScope,
+                languageID: languageID,
+                lexiconVersion: LexiconStore.currentLexiconVersion(),
+                userFrequencyRevision: UserFrequencyStore.cacheRevision(),
+                candidateMode: currentCandidateEngineMode.rawValue,
+                candidateModelLoaded: (ranker as? CoreMLCandidateRanker)?.isModelLoaded ?? false,
+                listwiseModelLoaded: ranker.isListwiseRerankingAvailable,
+                tokens: tokens.map { "\($0.languageID)\u{1E}\($0.rawValue)" }
+            )
+            if !isRuntimeTraceEnabled, let cached = Self.cachedWalk(for: cacheKey) {
+                return cached
             }
 
             let count = readings.count
-            var best: [WalkChoice?] = Array(repeating: nil, count: count)
+            let previous = (!isRuntimeTraceEnabled && allowIncrementalReuse && modelLoadedFallbackOnly)
+                ? Self.incrementalState(for: cacheScope)
+                : nil
+            let compatiblePrevious = previous.flatMap { prior -> IncrementalWalkState? in
+                let oldKey = prior.key
+                let sameContext = oldKey.scope == cacheKey.scope
+                    && oldKey.languageID == cacheKey.languageID
+                    && oldKey.lexiconVersion == cacheKey.lexiconVersion
+                    && oldKey.userFrequencyRevision == cacheKey.userFrequencyRevision
+                    && oldKey.candidateMode == cacheKey.candidateMode
+                    && oldKey.candidateModelLoaded == cacheKey.candidateModelLoaded
+                    && oldKey.listwiseModelLoaded == cacheKey.listwiseModelLoaded
+                guard sameContext, prior.tokens.count < count,
+                      Array(tokens.prefix(prior.tokens.count)) == prior.tokens else { return nil }
+                return prior
+            }
+            var best = compatiblePrevious?.best ?? Array(repeating: nil, count: count)
+            if let compatiblePrevious {
+                best.append(contentsOf: repeatElement(nil, count: count - compatiblePrevious.best.count))
+            }
             let terminalScore = 0.0
             var candidatesByReading: [String: [String]] = [:]
             var scoredCandidatesBySpan: [String: [String]] = [:]
             var userFrequencyByReading: [String: [String: Int]] = [:]
             var exactPhraseCandidatesByReading: [String: Set<String>] = [:]
-            var followingTokensByEnd: [Int: [InputToken]] = [:]
+            var grammaticalCandidatesByReading: [String: [String]] = [:]
 
+            func grammaticalCandidates(for reading: String) -> [String] {
+                if let cached = grammaticalCandidatesByReading[reading] { return cached }
+                let resolved = lexicon.resolveCandidates(for: reading).prefix(8)
+                    .filter { Self.grammaticalFunctionWords.contains($0) }
+                grammaticalCandidatesByReading[reading] = resolved
+                return resolved
+            }
+
+            var rowsReused = 0
             for start in stride(from: count - 1, through: 0, by: -1) {
                 var combined = ""
                 var localBest: WalkChoice?
@@ -83,10 +212,8 @@ struct ReadingWalker {
                     // 取得候選詞字面後判斷，不能只因同音候選存在就懲罰完整詞。
                     let boundaryFunctions: [(left: [String], right: [String])] = spanLength > 1
                         ? (start..<end).map { boundary in
-                            let left = lexicon.resolveCandidates(for: readings[boundary]).prefix(8)
-                                .filter { Self.grammaticalFunctionWords.contains($0) }
-                            let right = lexicon.resolveCandidates(for: readings[boundary + 1]).prefix(8)
-                                .filter { Self.grammaticalFunctionWords.contains($0) }
+                            let left = grammaticalCandidates(for: readings[boundary])
+                            let right = grammaticalCandidates(for: readings[boundary + 1])
                             return (left: left, right: right)
                         }
                         : []
@@ -120,18 +247,14 @@ struct ReadingWalker {
                             userFrequencyByReading[combined] = frequencies
                             return frequencies
                         }()
-                        let followingTokens = followingTokensByEnd[end] ?? {
-                            let suffix = end + 1 < count ? Array(tokens[(end + 1)...]) : []
-                            followingTokensByEnd[end] = suffix
-                            return suffix
-                        }()
                         let context = CandidateSelectionContext(
                             languageID: languageID,
                             allTokens: tokens,
                             combinedToken: combined,
                             spanLength: spanLength,
                             precedingValues: [],
-                            followingTokens: followingTokens,
+                            followingTokenStorage: tokens,
+                            startIndex: end + 1,
                             focusedToken: combined
                         )
                         let rankedValues = Array(scoredCandidates.prefix(8))
@@ -248,6 +371,27 @@ struct ReadingWalker {
                 }
 
                 best[start] = localBest
+                if let compatiblePrevious,
+                   start + 8 < compatiblePrevious.tokens.count {
+                    let downstreamDeltas: [Double] = (start + 1...start + 8).compactMap { index in
+                        guard let current = best[index],
+                              let prior = compatiblePrevious.best[index],
+                              current.segment == prior.segment,
+                              current.nextIndex == prior.nextIndex else { return nil }
+                        return current.score - prior.score
+                    }
+                    if let current = best[start],
+                       let prior = compatiblePrevious.best[start],
+                       current.segment == prior.segment,
+                       current.nextIndex == prior.nextIndex,
+                       downstreamDeltas.count == 8,
+                       let minimumDelta = downstreamDeltas.min(),
+                       let maximumDelta = downstreamDeltas.max(),
+                       maximumDelta - minimumDelta < 0.000001 {
+                        rowsReused = start
+                        break
+                    }
+                }
             }
 
             var result: [ComposedSegment] = []
@@ -259,8 +403,32 @@ struct ReadingWalker {
             if isRuntimeTraceEnabled {
                 appendRuntimeTrace("lattice.path readings=\(readings.joined(separator: "/")) segments=\(result.map { "\($0.start):\($0.length)=\($0.value)" }.joined(separator: "|")) score=\(best.first.flatMap { $0?.score } ?? 0)")
             }
-            return rerankResolvedSegments(result, allTokens: tokens)
+            let resolved = rerankResolvedSegments(result, allTokens: tokens)
+            if !isRuntimeTraceEnabled {
+                Self.storeWalk(resolved, for: cacheKey)
+                if allowIncrementalReuse && modelLoadedFallbackOnly {
+                    Self.storeIncrementalState(
+                        IncrementalWalkState(key: cacheKey, tokens: tokens, best: best),
+                        for: cacheScope
+                    )
+                    if compatiblePrevious != nil {
+                        Self.walkCacheLock.lock()
+                        Self.incrementalAppendCalls += 1
+                        if rowsReused > 0 {
+                            Self.incrementalEarlyStops += 1
+                            Self.incrementalRowsReused += rowsReused
+                        }
+                        Self.walkCacheLock.unlock()
+                    }
+                }
+            }
+            return resolved
         }
+    }
+
+    private var modelLoadedFallbackOnly: Bool {
+        guard let modelRanker = ranker as? CoreMLCandidateRanker else { return false }
+        return !modelRanker.isModelLoaded
     }
 
     private func rerankResolvedSegments(

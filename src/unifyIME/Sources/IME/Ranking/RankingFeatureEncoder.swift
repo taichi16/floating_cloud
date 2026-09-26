@@ -63,7 +63,7 @@ struct RankingFeatureEncoder {
         return [Double(recent.count), totalChars, hanCount, mixedCount]
     }
 
-    private func aggregateFollowingFeatures(_ tokens: [InputToken]) -> [Double] {
+    private func aggregateFollowingFeatures<C: Collection>(_ tokens: C) -> [Double] where C.Element == InputToken {
         let recent = Array(tokens.prefix(3))
         let totalChars = Double(recent.reduce(0) { $0 + $1.rawValue.count })
         let zhCount = Double(recent.filter { $0.languageID == "zh-Hant" }.count)

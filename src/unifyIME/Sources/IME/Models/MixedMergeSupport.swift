@@ -75,11 +75,11 @@ enum MixedCompositionResolver {
         // 因為同時能組出低品質注音片段而在同一段文字中前後不一致。
         let pendingReading = primaryState.currentReading
         let lexicon = SessionCtl.traditionalChineseProvider.lexicon
-        let isSingleChineseSyllable = primarySegments.count <= 1
-            && primaryState.readings.isEmpty
-            && !pendingReading.isEmpty
-        let hasExactPendingChinese = isSingleChineseSyllable
+        // 只看目前尚未完成的尾端音節；前面已有中文讀音不應使 up → ㄧㄣ
+        // 失去中文歧義判斷。how／you 的尾端只有一個注音符號，仍保留英文。
+        let hasExactPendingChinese = !pendingReading.isEmpty
             && !(lexicon.commonCharacterMap[pendingReading] ?? []).isEmpty
+            && (primaryState.readings.isEmpty || pendingReading.count > 1)
         let isPureASCIIWord = rawBuffer.count <= 3 && rawBuffer.unicodeScalars.allSatisfy {
             $0.isASCII && CharacterSet.letters.contains($0)
         } && EnglishIMEEngine.isExactWord(rawBuffer)

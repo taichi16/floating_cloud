@@ -741,6 +741,11 @@ func runUnifyIMEAppEntry() {
         exit(imkBoundaryProbe())
     }
 
+    if CommandLine.arguments.dropFirst().first == "reading-walk-incremental-probe" {
+        SessionCtl.prewarmLexicon()
+        exit(SessionCtl.runReadingWalkIncrementalProbe())
+    }
+
     if CommandLine.arguments.dropFirst().first == "phrase-stats-cache-status" {
         SessionCtl.prewarmChinesePredictionRuntime()
         let snapshot = LexiconStore.phraseContextStatsCacheSnapshot()

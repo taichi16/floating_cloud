@@ -128,6 +128,7 @@ enum PhoneticIMECore {
                 state.pendingRawInput = UnifiedCompositionState.sourceInput(for: state.currentReading)
             }
             for (rawKey, symbol) in zip(token.lowercased().map(String.init), mapped.map(String.init)) {
+                _ = splitLeadingStandaloneMedialIfNeeded(incoming: symbol, state: &state)
                 if SessionCtl.shouldFinalizeCurrentReading(current: state.currentReading, incoming: symbol) {
                     finalizeCurrentReading(state: &state)
                 }
@@ -152,6 +153,33 @@ enum PhoneticIMECore {
                 }
             }
         }
+    }
+
+    private static func splitLeadingStandaloneMedialIfNeeded(
+        incoming: String,
+        state: inout UnifiedCompositionState
+    ) -> Bool {
+        let symbols = state.currentReading.map(String.init)
+        guard symbols.count == 2,
+              state.pendingRawInput.count == symbols.count,
+              let first = symbols.first,
+              ["ㄧ", "ㄨ", "ㄩ"].contains(first),
+              let onset = symbols.last,
+              "ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙ".contains(onset),
+              ["ㄧ", "ㄨ", "ㄩ"].contains(incoming) else { return false }
+
+        let separateReading = BopomofoCanonicalizer.canonicalize(syllable: onset + incoming)
+        guard SessionCtl.hasEvidence(forSyllable: first),
+              BopomofoCanonicalizer.isPhonotacticallyValid(separateReading),
+              SessionCtl.hasEvidence(forSyllable: separateReading) else { return false }
+
+        let sourceKeys = state.pendingRawInput.map(String.init)
+        state.currentReading = first
+        state.pendingRawInput = sourceKeys[0]
+        finalizeCurrentReading(state: &state)
+        state.currentReading = onset
+        state.pendingRawInput = sourceKeys[1]
+        return true
     }
 
     static func feed(rawChars: String, chars: String? = nil, keyCode: Int? = nil, state: inout UnifiedCompositionState) {

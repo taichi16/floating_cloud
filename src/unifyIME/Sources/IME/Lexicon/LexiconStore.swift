@@ -261,13 +261,16 @@ struct LexiconStore {
     }
 
     func hasEvidence(forSyllable reading: String) -> Bool {
-        if hasCandidates(for: reading) { return true }
-        if !containsToneMark(reading) {
-            for tone in ["ˊ", "ˇ", "ˋ", "˙"] {
-                if hasCandidates(for: reading + tone) { return true }
-            }
+        let readings = containsToneMark(reading)
+            ? [reading]
+            : [reading] + ["ˊ", "ˇ", "ˋ", "˙"].map { reading + $0 }
+        if !(commonCharacterMap[reading] ?? []).isEmpty { return true }
+        if UserCustomPhraseStore.hasAnyPhrases(for: readings) { return true }
+        return readings.contains { candidateReading in
+            !(commonCharacterMap[candidateReading] ?? []).isEmpty
+                || !(phraseCandidateMap[candidateReading] ?? []).isEmpty
+                || !(overrideCharacterMap[candidateReading] ?? []).isEmpty
         }
-        return false
     }
 
     static func isDisplayableCandidate(_ candidate: String) -> Bool {

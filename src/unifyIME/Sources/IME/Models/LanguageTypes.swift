@@ -87,8 +87,41 @@ struct CandidateSelectionContext {
     let combinedToken: String
     let spanLength: Int
     let precedingValues: [String]
-    let followingTokens: [InputToken]
+    let followingTokens: TokenSuffix
     let focusedToken: String
+
+    init(languageID: String, allTokens: [InputToken], combinedToken: String, spanLength: Int,
+         precedingValues: [String], followingTokens: [InputToken], focusedToken: String) {
+        self.init(languageID: languageID, allTokens: allTokens, combinedToken: combinedToken,
+                  spanLength: spanLength, precedingValues: precedingValues,
+                  followingTokenStorage: followingTokens, startIndex: 0, focusedToken: focusedToken)
+    }
+
+    init(languageID: String, allTokens: [InputToken], combinedToken: String, spanLength: Int,
+         precedingValues: [String], followingTokenStorage: [InputToken], startIndex: Int,
+         focusedToken: String) {
+        self.languageID = languageID
+        self.allTokens = allTokens
+        self.combinedToken = combinedToken
+        self.spanLength = spanLength
+        self.precedingValues = precedingValues
+        self.followingTokens = TokenSuffix(storage: followingTokenStorage, startIndex: startIndex)
+        self.focusedToken = focusedToken
+    }
+}
+
+struct TokenSuffix: RandomAccessCollection {
+    typealias Index = Int
+    private let storage: [InputToken]
+    let startIndex: Int
+    var endIndex: Int { storage.endIndex }
+
+    init(storage: [InputToken], startIndex: Int) {
+        self.storage = storage
+        self.startIndex = Swift.min(Swift.max(startIndex, storage.startIndex), storage.endIndex)
+    }
+
+    subscript(position: Int) -> InputToken { storage[position] }
 }
 
 struct RankedCandidate: Equatable {
